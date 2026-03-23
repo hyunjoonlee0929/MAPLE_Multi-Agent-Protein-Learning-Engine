@@ -13,6 +13,8 @@ from core.active_learning_jobs import run_active_learning_job
 from core.active_learning_view import active_learning_acquisition_rows, active_learning_round_rows
 from core.campaign_jobs import run_campaign_job
 from core.campaign_view import campaign_acquisition_rows, campaign_round_rows
+from core.dbtl_jobs import run_dbtl_ingest_job
+from core.dbtl_view import dbtl_summary_row, dbtl_trial_rows
 from core.multiobjective import build_pareto_candidate_rows
 from core.validation import cv_run_rows, leaderboard_rows
 from core.validation_jobs import run_validation_report_jobs
@@ -176,6 +178,28 @@ def _render_campaign_report(campaign_report_path_text: str) -> None:
     if not acq_df.empty:
         st.caption("Campaign acquired sequences")
         st.dataframe(acq_df, use_container_width=True)
+
+
+def _render_dbtl_report(dbtl_report_path_text: str) -> None:
+    st.subheader("DBTL Ingestion Reports")
+    payload = _load_json_if_exists(dbtl_report_path_text)
+    if payload is None:
+        st.info("DBTL report not found yet. Run DBTL ingestion first.")
+        return
+
+    summary = dbtl_summary_row(payload)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Imported Records", int(summary["imported_records"]))
+    c2.metric("Retrain Triggered", "Yes" if bool(summary["retrain_triggered"]) else "No")
+    c3.metric("Val RMSE (Retrained)", f"{float(summary['val_rmse_mean']):.4f}")
+
+    st.dataframe(pd.DataFrame([summary]), use_container_width=True)
+
+    trial_df = pd.DataFrame(dbtl_trial_rows(payload))
+    if not trial_df.empty:
+        st.caption("Retrain hyperparameter trials")
+        st.line_chart(trial_df.set_index("ridge_alpha")[["val_mean_rmse", "val_mean_mae"]])
+        st.dataframe(trial_df, use_container_width=True)
 
 
 with st.sidebar:
@@ -414,6 +438,21 @@ with st.sidebar:
     campaign_rounds = st.slider("Campaign Rounds", min_value=1, max_value=10, value=3, step=1)
     campaign_maple_iterations = st.slider("Campaign MAPLE Iterations", min_value=1, max_value=20, value=3, step=1)
     campaign_acquisition_batch_size = st.slider("Campaign Acquisition Batch", min_value=1, max_value=20, value=4, step=1)
+    st.subheader("DBTL Ingestion")
+    dbtl_report_path = st.text_input(
+        "DBTL Report JSON",
+        value="outputs/dbtl_ingest/dbtl_retrain_report.json",
+    )
+    dbtl_seed_data = st.text_input("DBTL Seed Data CSV", value="data/sample_property_labels.csv")
+    dbtl_input_path = st.text_input("DBTL Input File", value="data/sample_dbtl_results.csv")
+    dbtl_format = st.selectbox("DBTL Input Format", options=["auto", "csv", "json"], index=0)
+    dbtl_output_dir = st.text_input("DBTL Output Dir", value="outputs/dbtl_ingest")
+    dbtl_checkpoint_out = st.text_input("DBTL Checkpoint Out", value="checkpoints/property_linear_dbtl.npz")
+    dbtl_min_records = st.slider("DBTL Min Records to Retrain", min_value=1, max_value=100, value=1, step=1)
+    run_dbtl_ingest_clicked = st.button(
+        "Run DBTL Ingestion + Retrain",
+        use_container_width=True,
+    )
     run_campaign_clicked = st.button(
         "Run Closed-Loop Campaign",
         use_container_width=True,
@@ -490,6 +529,32 @@ if run_campaign_clicked:
             st.text(campaign_result.stdout.strip())
         if campaign_result.stderr.strip():
             st.text(campaign_result.stderr.strip())
+
+if run_dbtl_ingest_clicked:
+    with st.spinner("Running DBTL ingestion and retrain trigger..."):
+        dbtl_result = run_dbtl_ingest_job(
+            root=ROOT,
+            seed_data=dbtl_seed_data.strip(),
+            dbtl_input=dbtl_input_path.strip(),
+            dbtl_format=dbtl_format,
+            output_dir=dbtl_output_dir.strip(),
+            checkpoint_out=dbtl_checkpoint_out.strip(),
+            embedding_dim=int(embedding_dim),
+            val_ratio=float(validation_val_ratio),
+            split_seed=int(validation_split_seed),
+            ridge_alphas=validation_ridge_alphas_csv.strip(),
+            min_imported_records=int(dbtl_min_records),
+        )
+    if dbtl_result.ok:
+        st.success("DBTL ingestion completed.")
+    else:
+        st.error("DBTL ingestion failed. Check logs below.")
+    with st.expander(f"DBTL Job (rc={dbtl_result.returncode})", expanded=not dbtl_result.ok):
+        st.code(" ".join(dbtl_result.command))
+        if dbtl_result.stdout.strip():
+            st.text(dbtl_result.stdout.strip())
+        if dbtl_result.stderr.strip():
+            st.text(dbtl_result.stderr.strip())
 
 if generate_validation_reports_clicked:
     with st.spinner("Generating validation leaderboard and CV report..."):
@@ -716,7 +781,7 @@ if run_clicked:
 
     st.subheader("Resolved Settings")
     st.code(json.dumps(resolved, indent=2))
-elif not generate_validation_reports_clicked and not run_active_learning_clicked and not run_campaign_clicked:
+elif not generate_validation_reports_clicked and not run_active_learning_clicked and not run_campaign_clicked and not run_dbtl_ingest_clicked:
     st.info("Configure parameters in the sidebar, then click 'Run MAPLE'.")
 
 st.divider()
@@ -728,3 +793,5 @@ st.divider()
 _render_active_learning_report(active_learning_report_path_text=al_report_path)
 st.divider()
 _render_campaign_report(campaign_report_path_text=campaign_report_path)
+st.divider()
+_render_dbtl_report(dbtl_report_path_text=dbtl_report_path)
