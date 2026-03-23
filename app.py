@@ -10,6 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from core.active_learning_jobs import run_active_learning_job
+from core.active_learning_view import active_learning_acquisition_rows, active_learning_round_rows
 from core.multiobjective import build_pareto_candidate_rows
 from core.validation import cv_run_rows, leaderboard_rows
 from core.validation_jobs import run_validation_report_jobs
@@ -124,6 +125,31 @@ def _render_validation_reports(leaderboard_path_text: str, cv_report_path_text: 
         if not cv_df.empty:
             st.line_chart(cv_df.set_index("split_seed")[["val_rmse_mean", "val_mae_mean"]])
             st.dataframe(cv_df, use_container_width=True)
+
+
+def _render_active_learning_report(active_learning_report_path_text: str) -> None:
+    st.subheader("Active Learning Reports")
+    payload = _load_json_if_exists(active_learning_report_path_text)
+    if payload is None:
+        st.info("Active learning report not found yet. Run active learning cycle first.")
+        return
+
+    round_df = pd.DataFrame(active_learning_round_rows(payload))
+    if not round_df.empty:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Rounds", int(len(round_df)))
+        c2.metric("Final Train Size", int(round_df.iloc[-1]["train_size"]))
+        c3.metric("Latest Val RMSE", f"{float(round_df.iloc[-1]['val_rmse_mean']):.4f}")
+
+        st.caption("Round-wise validation and acquisition trend")
+        st.line_chart(round_df.set_index("round")[["val_rmse_mean", "train_rmse_mean"]])
+        st.line_chart(round_df.set_index("round")[["acq_mean", "pseudo_stability_mean", "pseudo_activity_mean"]])
+        st.dataframe(round_df, use_container_width=True)
+
+    acq_df = pd.DataFrame(active_learning_acquisition_rows(payload))
+    if not acq_df.empty:
+        st.caption("Acquired batch details")
+        st.dataframe(acq_df, use_container_width=True)
 
 
 with st.sidebar:
@@ -337,6 +363,10 @@ with st.sidebar:
     st.subheader("Active Learning")
     al_data_path = st.text_input("AL Data CSV", value="data/sample_property_labels.csv")
     al_output_dir = st.text_input("AL Output Dir", value="outputs/active_learning")
+    al_report_path = st.text_input(
+        "AL Report JSON",
+        value="outputs/active_learning/active_learning_report.json",
+    )
     al_checkpoint_out = st.text_input(
         "AL Checkpoint Out",
         value="checkpoints/property_linear_active_learning.npz",
@@ -620,3 +650,5 @@ _render_validation_reports(
     leaderboard_path_text=leaderboard_report_path,
     cv_report_path_text=cv_report_path,
 )
+st.divider()
+_render_active_learning_report(active_learning_report_path_text=al_report_path)
