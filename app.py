@@ -65,6 +65,15 @@ st.markdown(
 
 cfg = load_config(DEFAULT_CONFIG)
 
+
+def _safe_float(value, default: float) -> float:
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
 with st.sidebar:
     st.header("Run Controls")
     seed_sequence = st.text_input("Seed Sequence", value=cfg.get("seed_sequence", ""))
@@ -116,18 +125,48 @@ with st.sidebar:
         step=0.01,
         disabled=not constraint_enabled or constraint_mode != "soft",
     )
-    min_stability = st.slider("Min Stability", min_value=-5.0, max_value=5.0, value=float(runtime.get("min_stability", -5.0)), step=0.05)
-    min_activity = st.slider("Min Activity", min_value=-5.0, max_value=5.0, value=float(runtime.get("min_activity", -5.0)), step=0.05)
+    min_stability = st.slider(
+        "Min Stability",
+        min_value=-5.0,
+        max_value=5.0,
+        value=_safe_float(runtime.get("min_stability", -5.0), -5.0),
+        step=0.05,
+    )
+    min_activity = st.slider(
+        "Min Activity",
+        min_value=-5.0,
+        max_value=5.0,
+        value=_safe_float(runtime.get("min_activity", -5.0), -5.0),
+        step=0.05,
+    )
     min_structure_confidence = st.slider(
         "Min Structure Confidence",
         min_value=0.0,
         max_value=1.0,
-        value=float(runtime.get("min_structure_confidence", 0.0)),
+        value=_safe_float(runtime.get("min_structure_confidence", 0.0), 0.0),
         step=0.01,
     )
-    min_plddt = st.slider("Min pLDDT", min_value=0.0, max_value=100.0, value=float(runtime.get("min_plddt", 0.0)), step=1.0)
-    min_ptm = st.slider("Min pTM", min_value=0.0, max_value=1.0, value=float(runtime.get("min_ptm", 0.0)), step=0.01)
-    max_pae = st.slider("Max PAE", min_value=0.0, max_value=50.0, value=float(runtime.get("max_pae", 50.0)), step=0.5)
+    min_plddt = st.slider(
+        "Min pLDDT",
+        min_value=0.0,
+        max_value=100.0,
+        value=_safe_float(runtime.get("min_plddt", 0.0), 0.0),
+        step=1.0,
+    )
+    min_ptm = st.slider(
+        "Min pTM",
+        min_value=0.0,
+        max_value=1.0,
+        value=_safe_float(runtime.get("min_ptm", 0.0), 0.0),
+        step=0.01,
+    )
+    max_pae = st.slider(
+        "Max PAE",
+        min_value=0.0,
+        max_value=50.0,
+        value=_safe_float(runtime.get("max_pae", 50.0), 50.0),
+        step=0.5,
+    )
 
     st.subheader("Scoring Weights")
     w_stability = st.slider("Stability Weight", min_value=0.0, max_value=1.0, value=float(runtime.get("w_stability", 0.40)), step=0.01)
