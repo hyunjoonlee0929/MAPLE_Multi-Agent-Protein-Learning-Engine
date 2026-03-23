@@ -176,3 +176,21 @@ The Streamlit UI also supports entering the checkpoint path in the sidebar.
 - `core/reporting.py`: artifact export
 - `agents/*.py`: independently testable agent logic
 - `tests/*.py`: unit/integration tests
+
+## Constraint Mode Auto-Comparison
+You can automatically compare `hard` vs `soft` constraint strategies under the same seed/settings.
+
+```bash
+cd MAPLE
+python3 scripts/compare_constraint_modes.py \
+  --num-iterations 3 \
+  --structure-backend dummy \
+  --min-plddt 60 \
+  --max-pae 20 \
+  --constraint-penalty 0.2
+```
+
+Generated artifacts:
+- `outputs/constraint_compare/constraint_comparison.json`
+- `outputs/constraint_compare/constraint_comparison.md`
+- full run artifacts under `outputs/constraint_compare/hard` and `outputs/constraint_compare/soft`
