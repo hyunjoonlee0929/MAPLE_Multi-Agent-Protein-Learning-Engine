@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from core.multiobjective import build_pareto_candidate_rows
 from core.validation import cv_run_rows, leaderboard_rows
 from core.validation_jobs import run_validation_report_jobs
 from main import load_config, run_maple
@@ -502,6 +503,42 @@ if run_clicked:
             }
         )
     st.dataframe(pd.DataFrame(records), use_container_width=True)
+
+    st.subheader("Multi-Objective Pareto View")
+    pareto_rows = build_pareto_candidate_rows(final_state)
+    pareto_df = pd.DataFrame(pareto_rows)
+    if not pareto_df.empty:
+        p1, p2 = st.columns(2)
+        front_count = int(pareto_df["is_pareto_front"].sum())
+        p1.metric("Pareto Front Size", front_count)
+        p2.metric("Total Candidates", int(len(pareto_df)))
+
+        st.caption("Stability vs Activity (all candidates)")
+        st.scatter_chart(pareto_df, x="stability", y="activity")
+
+        front_df = pareto_df[pareto_df["is_pareto_front"]]
+        if not front_df.empty:
+            st.caption("Pareto front only")
+            st.scatter_chart(front_df, x="stability", y="activity")
+
+        st.dataframe(
+            pareto_df[
+                [
+                    "rank",
+                    "sequence",
+                    "score",
+                    "stability",
+                    "activity",
+                    "uncertainty",
+                    "structure_confidence",
+                    "pareto_rank",
+                    "is_pareto_front",
+                ]
+            ],
+            use_container_width=True,
+        )
+    else:
+        st.info("Pareto view unavailable for empty candidate list.")
 
     st.subheader("Artifacts")
     st.write(f"Saved to: `{artifact_dir}`")

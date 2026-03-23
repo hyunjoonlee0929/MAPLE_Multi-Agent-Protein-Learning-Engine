@@ -269,6 +269,7 @@ The Streamlit UI also supports entering the checkpoint path in the sidebar.
   - checkpoint leaderboard (`validation_leaderboard.json`)
   - cross-seed reproducibility (`property_cv_report.json`)
 - Sidebar button to generate validation reports directly from UI
+- Pareto front view for current run candidates (stability/activity/objective rank)
 - Downloadable artifacts (`history.json`, `summary.json`)
 
 `summary.json` now includes `validation_reports` when report paths are provided.
