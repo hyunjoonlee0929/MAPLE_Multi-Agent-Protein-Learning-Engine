@@ -66,6 +66,7 @@ st.markdown(
 cfg = load_config(DEFAULT_CONFIG)
 
 
+
 def _safe_float(value, default: float) -> float:
     try:
         if value is None:
@@ -73,6 +74,7 @@ def _safe_float(value, default: float) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
 
 with st.sidebar:
     st.header("Run Controls")
@@ -322,6 +324,16 @@ if run_clicked:
         if "constraint_pass_rate" in hist_df.columns:
             st.caption("Constraint pass rate trend")
             st.line_chart(hist_df.set_index("iteration")[["constraint_pass_rate"]])
+
+        if {"structure_external_rate", "structure_mock_rate", "structure_error_fallback_rate"}.issubset(hist_df.columns):
+            st.caption("Structure adapter mode rates")
+            st.line_chart(
+                hist_df.set_index("iteration")[[
+                    "structure_external_rate",
+                    "structure_mock_rate",
+                    "structure_error_fallback_rate",
+                ]]
+            )
         st.dataframe(hist_df, use_container_width=True)
     else:
         st.info("No history records were produced.")

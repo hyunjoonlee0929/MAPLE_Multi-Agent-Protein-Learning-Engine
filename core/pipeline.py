@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import dataclass
 
 from agents.evaluation_agent import EvaluationAgent
@@ -62,6 +63,32 @@ class MaplePipeline:
         state["history"][-1]["constraint_pass_rate"] = pass_rate
         state["history"][-1]["constraint_violation_counts"] = summary.get("violation_counts", {})
 
+    def _attach_structure_monitoring(self, state: State) -> None:
+        if not state.get("history"):
+            return
+
+        structures = state.get("structures", [])
+        total = len(structures)
+        if total == 0:
+            return
+
+        mode_counts = Counter(str(item.get("mode", "unknown")) for item in structures)
+        backend_counts = Counter(str(item.get("backend", "unknown")) for item in structures)
+
+        external = mode_counts.get("external", 0)
+        mock = mode_counts.get("mock", 0)
+        fallback = mode_counts.get("error_fallback", 0)
+
+        state["history"][-1]["structure_total"] = total
+        state["history"][-1]["structure_external"] = external
+        state["history"][-1]["structure_mock"] = mock
+        state["history"][-1]["structure_error_fallback"] = fallback
+        state["history"][-1]["structure_external_rate"] = float(external) / float(total)
+        state["history"][-1]["structure_mock_rate"] = float(mock) / float(total)
+        state["history"][-1]["structure_error_fallback_rate"] = float(fallback) / float(total)
+        state["history"][-1]["structure_mode_counts"] = dict(mode_counts)
+        state["history"][-1]["structure_backend_counts"] = dict(backend_counts)
+
     def run(self, state: State) -> State:
         for iteration in range(self.config.num_iterations):
             state["iteration"] = iteration
@@ -74,6 +101,7 @@ class MaplePipeline:
             ensure_numpy_embeddings(state)
             state = self.optimization_agent.run(state)
             self._attach_constraint_history(state)
+            self._attach_structure_monitoring(state)
 
             best_seq = state["history"][-1]["best_sequence"]
             best_score = state["history"][-1]["best_score"]

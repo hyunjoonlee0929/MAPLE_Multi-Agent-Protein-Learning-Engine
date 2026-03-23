@@ -194,3 +194,12 @@ Generated artifacts:
 - `outputs/constraint_compare/constraint_comparison.json`
 - `outputs/constraint_compare/constraint_comparison.md`
 - full run artifacts under `outputs/constraint_compare/hard` and `outputs/constraint_compare/soft`
+
+## Structure Adapter Monitoring
+Per-iteration adapter observability fields are now stored in `history`:
+- `structure_external_rate`
+- `structure_mock_rate`
+- `structure_error_fallback_rate`
+- `structure_external`, `structure_mock`, `structure_error_fallback`, `structure_total`
+
+These metrics are visualized in the Streamlit UI as a trend chart.

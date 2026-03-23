@@ -28,6 +28,13 @@ def export_history_csv(history: list[dict], output_path: Path) -> None:
         "constraint_passed",
         "constraint_total",
         "constraint_mode",
+        "structure_external_rate",
+        "structure_mock_rate",
+        "structure_error_fallback_rate",
+        "structure_external",
+        "structure_mock",
+        "structure_error_fallback",
+        "structure_total",
     ]
 
     dynamic_headers: list[str] = []

@@ -19,6 +19,13 @@ def test_reporting_exports_json_csv_and_summary(tmp_path: Path) -> None:
             "constraint_passed": 4,
             "constraint_total": 5,
             "constraint_mode": "hard",
+            "structure_external_rate": 0.2,
+            "structure_mock_rate": 0.7,
+            "structure_error_fallback_rate": 0.1,
+            "structure_external": 1,
+            "structure_mock": 3,
+            "structure_error_fallback": 1,
+            "structure_total": 5,
         }
     ]
     final_state = {
@@ -46,3 +53,5 @@ def test_reporting_exports_json_csv_and_summary(tmp_path: Path) -> None:
     csv_text = csv_path.read_text(encoding="utf-8")
     assert "constraint_pass_rate" in csv_text
     assert "constraint_mode" in csv_text
+    assert "structure_external_rate" in csv_text
+    assert "structure_error_fallback_rate" in csv_text

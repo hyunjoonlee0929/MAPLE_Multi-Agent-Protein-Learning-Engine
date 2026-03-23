@@ -51,3 +51,6 @@ def test_pipeline_runs_multiple_iterations_end_to_end() -> None:
     assert "constraint_pass_rate" in final_state["history"][-1]
     assert "constraint_passed" in final_state["history"][-1]
     assert "constraint_total" in final_state["history"][-1]
+    assert "structure_external_rate" in final_state["history"][-1]
+    assert "structure_mock_rate" in final_state["history"][-1]
+    assert "structure_error_fallback_rate" in final_state["history"][-1]
