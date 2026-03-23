@@ -1,4 +1,4 @@
-"""Entry point for running the MAPLE MVP pipeline."""
+"""Entry point and run service for MAPLE."""
 
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ def setup_logging() -> None:
 
 
 def set_global_seed(seed: int) -> None:
-    """Set global seeds for reproducible MVP runs."""
+    """Set global seeds for reproducible runs."""
     random.seed(seed)
     np.random.seed(seed)
     try:
@@ -106,111 +106,50 @@ def set_global_seed(seed: int) -> None:
 
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run MAPLE multi-agent protein optimization")
-    parser.add_argument("--config", type=str, default="config.yaml", help="Path to config YAML")
-    parser.add_argument("--seed", type=int, default=None, help="Global random seed")
+def run_maple(
+    config: dict,
+    overrides: dict | None = None,
+    output_dir: str | Path = "outputs",
+    logger: logging.Logger | None = None,
+) -> tuple[dict, dict, Path]:
+    """Run MAPLE with resolved config and optional overrides.
 
-    parser.add_argument("--seed-sequence", type=str, default=None, help="Override seed protein sequence")
-    parser.add_argument("--num-iterations", type=int, default=None, help="Override iteration count")
+    Returns:
+      final_state, resolved_runtime_info, resolved_output_dir
+    """
+    logger = logger or logging.getLogger("MAPLE")
+    overrides = overrides or {}
 
-    parser.add_argument("--num-candidates", type=int, default=None, help="Override candidates per iteration")
-    parser.add_argument("--top-k", type=int, default=None, help="Override top-k elite count")
-    parser.add_argument("--mutation-rate", type=int, default=None, help="Override mutations per sequence")
-    parser.add_argument(
-        "--selection-strategy",
-        type=str,
-        default=None,
-        help="Elite selection strategy: elitist|diverse",
-    )
-    parser.add_argument(
-        "--min-hamming-distance",
-        type=int,
-        default=None,
-        help="Minimum Hamming distance when using diverse selection",
-    )
+    def _pick(name: str, default):
+        value = overrides.get(name)
+        return default if value is None else value
 
-    parser.add_argument("--embedding-dim", type=int, default=None, help="Override embedding dimension")
-    parser.add_argument(
-        "--property-checkpoint",
-        type=str,
-        default=None,
-        help="Optional PyTorch checkpoint path for property predictor",
-    )
-    parser.add_argument(
-        "--uncertainty-samples",
-        type=int,
-        default=None,
-        help="MC sample count for uncertainty estimation",
-    )
-    parser.add_argument(
-        "--uncertainty-noise",
-        type=float,
-        default=None,
-        help="Input noise std for uncertainty estimation",
-    )
-    parser.add_argument(
-        "--structure-backend",
-        type=str,
-        default=None,
-        help="Structure backend: dummy|esmfold|alphafold2",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default="outputs",
-        help="Directory for history and summary artifacts",
-    )
-
-    return parser.parse_args()
-
-
-
-def main() -> None:
-    setup_logging()
-    logger = logging.getLogger("MAPLE")
-    args = parse_args()
-
-    config_path = Path(args.config)
-    if not config_path.is_absolute():
-        config_path = Path(__file__).parent / config_path
-
-    config = load_config(config_path)
-
-    seed = args.seed if args.seed is not None else int(config.get("seed", 42))
+    seed = int(_pick("seed", config.get("seed", 42)))
     set_global_seed(seed)
 
-    seed_sequence = args.seed_sequence or config["seed_sequence"]
-    num_iterations = int(args.num_iterations if args.num_iterations is not None else config["num_iterations"])
+    seed_sequence = str(_pick("seed_sequence", config["seed_sequence"]))
+    num_iterations = int(_pick("num_iterations", config["num_iterations"]))
 
     runtime_cfg = dict(config.get("runtime", {}))
-    if args.num_candidates is not None:
-        runtime_cfg["num_candidates"] = args.num_candidates
-    if args.top_k is not None:
-        runtime_cfg["top_k"] = args.top_k
-    if args.mutation_rate is not None:
-        runtime_cfg["mutation_rate"] = args.mutation_rate
-    if args.selection_strategy is not None:
-        runtime_cfg["selection_strategy"] = args.selection_strategy
-    if args.min_hamming_distance is not None:
-        runtime_cfg["min_hamming_distance"] = args.min_hamming_distance
+    for key in [
+        "num_candidates",
+        "top_k",
+        "mutation_rate",
+        "selection_strategy",
+        "min_hamming_distance",
+        "w_stability",
+        "w_activity",
+        "w_uncertainty",
+    ]:
+        if key in overrides and overrides[key] is not None:
+            runtime_cfg[key] = overrides[key]
 
     model_cfg = dict(config.get("model", {}))
-    embedding_dim = int(
-        args.embedding_dim if args.embedding_dim is not None else model_cfg.get("embedding_dim", 128)
-    )
-    property_checkpoint = args.property_checkpoint or model_cfg.get("property_checkpoint")
-    structure_backend = args.structure_backend or model_cfg.get("structure_backend", "dummy")
-    uncertainty_samples = int(
-        args.uncertainty_samples
-        if args.uncertainty_samples is not None
-        else model_cfg.get("uncertainty_samples", 5)
-    )
-    uncertainty_noise = float(
-        args.uncertainty_noise
-        if args.uncertainty_noise is not None
-        else model_cfg.get("uncertainty_noise", 0.02)
-    )
+    embedding_dim = int(_pick("embedding_dim", model_cfg.get("embedding_dim", 128)))
+    property_checkpoint = _pick("property_checkpoint", model_cfg.get("property_checkpoint"))
+    structure_backend = str(_pick("structure_backend", model_cfg.get("structure_backend", "dummy")))
+    uncertainty_samples = int(_pick("uncertainty_samples", model_cfg.get("uncertainty_samples", 5)))
+    uncertainty_noise = float(_pick("uncertainty_noise", model_cfg.get("uncertainty_noise", 0.02)))
 
     state = create_initial_state(seed_sequence)
     state["config"] = runtime_cfg
@@ -233,13 +172,90 @@ def main() -> None:
 
     final_state = pipeline.run(state)
 
-    output_dir = Path(args.output_dir)
-    if not output_dir.is_absolute():
-        output_dir = Path(__file__).parent / output_dir
+    resolved_output_dir = Path(output_dir)
+    if not resolved_output_dir.is_absolute():
+        resolved_output_dir = Path(__file__).parent / resolved_output_dir
 
-    export_history_json(final_state["history"], output_dir / "history.json")
-    export_history_csv(final_state["history"], output_dir / "history.csv")
-    export_final_summary(final_state, output_dir / "summary.json")
+    export_history_json(final_state["history"], resolved_output_dir / "history.json")
+    export_history_csv(final_state["history"], resolved_output_dir / "history.csv")
+    export_final_summary(final_state, resolved_output_dir / "summary.json")
+
+    resolved = {
+        "seed": seed,
+        "num_iterations": num_iterations,
+        "structure_backend": structure_backend,
+        "selection_strategy": runtime_cfg.get("selection_strategy", "elitist"),
+        "output_dir": str(resolved_output_dir),
+    }
+    return final_state, resolved, resolved_output_dir
+
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run MAPLE multi-agent protein optimization")
+    parser.add_argument("--config", type=str, default="config.yaml", help="Path to config YAML")
+    parser.add_argument("--seed", type=int, default=None, help="Global random seed")
+
+    parser.add_argument("--seed-sequence", type=str, default=None, help="Override seed protein sequence")
+    parser.add_argument("--num-iterations", type=int, default=None, help="Override iteration count")
+
+    parser.add_argument("--num-candidates", type=int, default=None, help="Override candidates per iteration")
+    parser.add_argument("--top-k", type=int, default=None, help="Override top-k elite count")
+    parser.add_argument("--mutation-rate", type=int, default=None, help="Override mutations per sequence")
+    parser.add_argument("--selection-strategy", type=str, default=None, help="Elite selection strategy")
+    parser.add_argument("--min-hamming-distance", type=int, default=None, help="Minimum Hamming distance")
+
+    parser.add_argument("--w-stability", type=float, default=None, help="Score weight for stability")
+    parser.add_argument("--w-activity", type=float, default=None, help="Score weight for activity")
+    parser.add_argument("--w-uncertainty", type=float, default=None, help="Score weight for uncertainty")
+
+    parser.add_argument("--embedding-dim", type=int, default=None, help="Override embedding dimension")
+    parser.add_argument("--property-checkpoint", type=str, default=None, help="Property checkpoint path")
+    parser.add_argument("--uncertainty-samples", type=int, default=None, help="MC sample count")
+    parser.add_argument("--uncertainty-noise", type=float, default=None, help="Input noise std")
+    parser.add_argument("--structure-backend", type=str, default=None, help="Structure backend")
+    parser.add_argument("--output-dir", type=str, default="outputs", help="Artifact directory")
+
+    return parser.parse_args()
+
+
+
+def main() -> None:
+    setup_logging()
+    logger = logging.getLogger("MAPLE")
+    args = parse_args()
+
+    config_path = Path(args.config)
+    if not config_path.is_absolute():
+        config_path = Path(__file__).parent / config_path
+
+    config = load_config(config_path)
+
+    overrides = {
+        "seed": args.seed,
+        "seed_sequence": args.seed_sequence,
+        "num_iterations": args.num_iterations,
+        "num_candidates": args.num_candidates,
+        "top_k": args.top_k,
+        "mutation_rate": args.mutation_rate,
+        "selection_strategy": args.selection_strategy,
+        "min_hamming_distance": args.min_hamming_distance,
+        "w_stability": args.w_stability,
+        "w_activity": args.w_activity,
+        "w_uncertainty": args.w_uncertainty,
+        "embedding_dim": args.embedding_dim,
+        "property_checkpoint": args.property_checkpoint,
+        "uncertainty_samples": args.uncertainty_samples,
+        "uncertainty_noise": args.uncertainty_noise,
+        "structure_backend": args.structure_backend,
+    }
+
+    final_state, resolved, output_dir = run_maple(
+        config=config,
+        overrides=overrides,
+        output_dir=args.output_dir,
+        logger=logger,
+    )
 
     logger.info("Run completed.")
     logger.info("Best sequence: %s", final_state["sequences"][0] if final_state["sequences"] else None)
@@ -249,13 +265,13 @@ def main() -> None:
 
     print("\n=== MAPLE Summary ===")
     print(f"Project: {config.get('project_title')}")
-    print(f"Iterations: {num_iterations}")
-    print(f"Seed: {seed}")
-    print(f"Structure backend: {structure_backend}")
-    print(f"Selection strategy: {runtime_cfg.get('selection_strategy', 'elitist')}")
+    print(f"Iterations: {resolved['num_iterations']}")
+    print(f"Seed: {resolved['seed']}")
+    print(f"Structure backend: {resolved['structure_backend']}")
+    print(f"Selection strategy: {resolved['selection_strategy']}")
     print(f"Final best sequence: {final_state['sequences'][0] if final_state['sequences'] else 'N/A'}")
     print(f"Final best score: {final_state['scores'][0] if final_state['scores'] else 'N/A'}")
-    print(f"Artifacts: {output_dir}")
+    print(f"Artifacts: {resolved['output_dir']}")
 
 
 if __name__ == "__main__":
