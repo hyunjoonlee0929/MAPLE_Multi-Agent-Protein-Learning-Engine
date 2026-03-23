@@ -10,6 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from core.validation import cv_run_rows, leaderboard_rows
+from core.validation_jobs import run_validation_report_jobs
 from main import load_config, run_maple
 
 
@@ -284,8 +285,66 @@ with st.sidebar:
         value="outputs/property_cv/property_cv_report.json",
         help="Path to property_cv_report.json",
     )
+    validation_data_path = st.text_input(
+        "Validation Data CSV",
+        value="data/sample_property_labels.csv",
+        help="Dataset path used by validation scripts.",
+    )
+    validation_checkpoints_csv = st.text_input(
+        "Validation Checkpoints (.npz/.pt, comma-separated)",
+        value="checkpoints/property_linear.npz",
+    )
+    validation_val_ratio = st.slider(
+        "Validation Ratio",
+        min_value=0.05,
+        max_value=0.5,
+        value=0.2,
+        step=0.05,
+    )
+    validation_split_seed = st.number_input("Validation Split Seed", min_value=0, value=42, step=1)
+    validation_split_seeds_csv = st.text_input("CV Split Seeds", value="1,7,13,21,42")
+    validation_ridge_alphas_csv = st.text_input("CV Ridge Alphas", value="1e-4,1e-3,1e-2,1e-1")
+    validation_leaderboard_output_dir = st.text_input(
+        "Leaderboard Output Dir",
+        value="outputs/property_validation",
+    )
+    validation_cv_output_dir = st.text_input(
+        "CV Report Output Dir",
+        value="outputs/property_cv",
+    )
+    generate_validation_reports_clicked = st.button(
+        "Generate Validation Reports",
+        use_container_width=True,
+    )
 
     run_clicked = st.button("Run MAPLE", type="primary", use_container_width=True)
+
+if generate_validation_reports_clicked:
+    with st.spinner("Generating validation leaderboard and CV report..."):
+        job_results = run_validation_report_jobs(
+            root=ROOT,
+            data_path=validation_data_path.strip(),
+            checkpoints_csv=validation_checkpoints_csv.strip(),
+            val_ratio=float(validation_val_ratio),
+            split_seed=int(validation_split_seed),
+            split_seeds_csv=validation_split_seeds_csv.strip(),
+            ridge_alphas_csv=validation_ridge_alphas_csv.strip(),
+            leaderboard_output_dir=validation_leaderboard_output_dir.strip(),
+            cv_output_dir=validation_cv_output_dir.strip(),
+        )
+
+    if job_results and all(item.ok for item in job_results):
+        st.success("Validation reports generated successfully.")
+    else:
+        st.error("Validation report generation failed. Check command logs below.")
+
+    for item in job_results:
+        with st.expander(f"Job: {item.name} (rc={item.returncode})", expanded=not item.ok):
+            st.code(" ".join(item.command))
+            if item.stdout.strip():
+                st.text(item.stdout.strip())
+            if item.stderr.strip():
+                st.text(item.stderr.strip())
 
 if run_clicked:
     overrides = {
@@ -445,7 +504,7 @@ if run_clicked:
 
     st.subheader("Resolved Settings")
     st.code(json.dumps(resolved, indent=2))
-else:
+elif not generate_validation_reports_clicked:
     st.info("Configure parameters in the sidebar, then click 'Run MAPLE'.")
 
 st.divider()
