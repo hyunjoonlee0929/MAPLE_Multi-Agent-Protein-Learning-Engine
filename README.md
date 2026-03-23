@@ -270,6 +270,30 @@ Outputs:
 - `outputs/active_learning/augmented_dataset.csv`
 - `checkpoints/property_linear_active_learning.npz`
 
+## Closed-Loop In-Silico Campaign
+This campaign script ties together:
+- MAPLE design loop (`pareto` / `pareto_bo`)
+- pseudo-label acquisition
+- round-wise property model retraining
+
+```bash
+cd MAPLE
+python3 scripts/closed_loop_campaign.py \
+  --config config.yaml \
+  --data data/sample_property_labels.csv \
+  --rounds 3 \
+  --maple-iterations 3 \
+  --acquisition-batch-size 4 \
+  --selection-strategy pareto_bo \
+  --bo-beta 0.30 \
+  --output-dir outputs/closed_loop_campaign
+```
+
+Outputs:
+- `outputs/closed_loop_campaign/campaign_report.json`
+- `outputs/closed_loop_campaign/train_dataset_final.csv`
+- per-round model checkpoints and MAPLE artifacts
+
 ### 3) Run MAPLE with trained checkpoint
 ```bash
 cd MAPLE
