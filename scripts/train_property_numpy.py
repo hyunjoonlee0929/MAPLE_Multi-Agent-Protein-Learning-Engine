@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sys
 from pathlib import Path
 
@@ -14,6 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from models.embedding_model import RandomEmbeddingModel
+from utils.metrics import evaluate_property_metrics
 
 
 
@@ -40,6 +42,34 @@ def load_dataset(csv_path: Path) -> tuple[list[str], np.ndarray]:
     return sequences, np.asarray(targets, dtype=np.float32)
 
 
+def split_train_val(
+    sequences: list[str],
+    targets: np.ndarray,
+    val_ratio: float,
+    seed: int,
+) -> tuple[list[str], np.ndarray, list[str], np.ndarray]:
+    n = len(sequences)
+    if n < 2:
+        raise ValueError("Need at least 2 samples for train/validation split")
+
+    ratio = min(max(val_ratio, 0.0), 0.9)
+    val_count = int(round(n * ratio))
+    val_count = max(1, min(val_count, n - 1))
+
+    idx = np.arange(n, dtype=np.int64)
+    rng = np.random.default_rng(seed)
+    rng.shuffle(idx)
+
+    val_idx = idx[:val_count]
+    train_idx = idx[val_count:]
+
+    train_seq = [sequences[int(i)] for i in train_idx]
+    val_seq = [sequences[int(i)] for i in val_idx]
+    train_targets = targets[train_idx]
+    val_targets = targets[val_idx]
+    return train_seq, train_targets, val_seq, val_targets
+
+
 
 def fit_ridge_regression(features: np.ndarray, targets: np.ndarray, ridge_alpha: float) -> tuple[np.ndarray, np.ndarray]:
     """Fit multivariate linear regression with L2 regularization."""
@@ -59,10 +89,8 @@ def fit_ridge_regression(features: np.ndarray, targets: np.ndarray, ridge_alpha:
 
 
 
-def evaluate_rmse(features: np.ndarray, targets: np.ndarray, weights: np.ndarray, bias: np.ndarray) -> np.ndarray:
-    preds = features @ weights + bias
-    mse = np.mean((preds - targets) ** 2, axis=0)
-    return np.sqrt(mse)
+def predict_linear(features: np.ndarray, weights: np.ndarray, bias: np.ndarray) -> np.ndarray:
+    return features @ weights + bias
 
 
 
@@ -77,6 +105,14 @@ def main() -> None:
     )
     parser.add_argument("--embedding-dim", type=int, default=128, help="Embedding dimension")
     parser.add_argument("--ridge-alpha", type=float, default=1e-3, help="L2 regularization strength")
+    parser.add_argument("--val-ratio", type=float, default=0.2, help="Validation split ratio")
+    parser.add_argument("--split-seed", type=int, default=42, help="Train/val split seed")
+    parser.add_argument(
+        "--metrics-out",
+        type=str,
+        default="outputs/property_metrics/property_train_metrics.json",
+        help="Output JSON path for train/val metrics",
+    )
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[1]
@@ -88,12 +124,28 @@ def main() -> None:
     if not output_path.is_absolute():
         output_path = root / output_path
 
-    sequences, targets = load_dataset(data_path)
-    embedder = RandomEmbeddingModel(embedding_dim=args.embedding_dim)
-    features = np.stack([embedder.encode(seq) for seq in sequences]).astype(np.float32)
+    metrics_path = Path(args.metrics_out)
+    if not metrics_path.is_absolute():
+        metrics_path = root / metrics_path
 
-    weights, bias = fit_ridge_regression(features, targets, ridge_alpha=float(args.ridge_alpha))
-    rmse = evaluate_rmse(features, targets, weights, bias)
+    sequences, targets = load_dataset(data_path)
+    train_sequences, train_targets, val_sequences, val_targets = split_train_val(
+        sequences,
+        targets,
+        val_ratio=float(args.val_ratio),
+        seed=int(args.split_seed),
+    )
+
+    embedder = RandomEmbeddingModel(embedding_dim=args.embedding_dim)
+    train_features = np.stack([embedder.encode(seq) for seq in train_sequences]).astype(np.float32)
+    val_features = np.stack([embedder.encode(seq) for seq in val_sequences]).astype(np.float32)
+
+    weights, bias = fit_ridge_regression(train_features, train_targets, ridge_alpha=float(args.ridge_alpha))
+    train_preds = predict_linear(train_features, weights, bias)
+    val_preds = predict_linear(val_features, weights, bias)
+
+    train_metrics = evaluate_property_metrics(train_targets, train_preds)
+    val_metrics = evaluate_property_metrics(val_targets, val_preds)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
@@ -104,8 +156,41 @@ def main() -> None:
         bias=bias,
     )
 
+    metrics_payload = {
+        "dataset": str(data_path),
+        "split": {
+            "train_count": int(train_targets.shape[0]),
+            "val_count": int(val_targets.shape[0]),
+            "val_ratio": float(args.val_ratio),
+            "split_seed": int(args.split_seed),
+        },
+        "model": {
+            "type": "numpy_linear_ridge",
+            "embedding_dim": int(args.embedding_dim),
+            "ridge_alpha": float(args.ridge_alpha),
+        },
+        "train_metrics": train_metrics,
+        "val_metrics": val_metrics,
+    }
+    metrics_path.parent.mkdir(parents=True, exist_ok=True)
+    metrics_path.write_text(json.dumps(metrics_payload, indent=2), encoding="utf-8")
+
     print(f"Saved checkpoint: {output_path}")
-    print(f"Train RMSE stability={rmse[0]:.4f}, activity={rmse[1]:.4f}")
+    print(f"Saved metrics: {metrics_path}")
+    print(
+        "Train mean metrics: "
+        f"RMSE={train_metrics['mean']['rmse']:.4f}, "
+        f"MAE={train_metrics['mean']['mae']:.4f}, "
+        f"R2={train_metrics['mean']['r2']:.4f}, "
+        f"Pearson={train_metrics['mean']['pearson']:.4f}"
+    )
+    print(
+        "Validation mean metrics: "
+        f"RMSE={val_metrics['mean']['rmse']:.4f}, "
+        f"MAE={val_metrics['mean']['mae']:.4f}, "
+        f"R2={val_metrics['mean']['r2']:.4f}, "
+        f"Pearson={val_metrics['mean']['pearson']:.4f}"
+    )
 
 
 if __name__ == "__main__":

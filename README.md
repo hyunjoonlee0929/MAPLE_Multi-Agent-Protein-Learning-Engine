@@ -141,14 +141,37 @@ Expected columns:
 A sample dataset is included at:
 - `data/sample_property_labels.csv`
 
-### 2) Train NPZ checkpoint
+### 2) Train NPZ checkpoint with validation metrics
 ```bash
 cd MAPLE
 python3 scripts/train_property_numpy.py \
   --data data/sample_property_labels.csv \
   --output checkpoints/property_linear.npz \
-  --embedding-dim 128
+  --embedding-dim 128 \
+  --val-ratio 0.2 \
+  --split-seed 42 \
+  --metrics-out outputs/property_metrics/property_train_metrics.json
 ```
+
+The training pipeline now performs:
+- train/validation split
+- ridge-regression fitting on train split
+- validation metric reporting (`RMSE`, `MAE`, `R2`, `Pearson`) for stability/activity and mean
+- metrics artifact export as JSON
+
+### 2-1) Retraining Pipeline (validation-driven model selection)
+```bash
+cd MAPLE
+python3 scripts/retrain_property_pipeline.py \
+  --data data/sample_property_labels.csv \
+  --ridge-alphas "1e-4,1e-3,1e-2,1e-1" \
+  --checkpoint-out checkpoints/property_linear_best.npz \
+  --output-dir outputs/property_retrain
+```
+
+Outputs:
+- `checkpoints/property_linear_best.npz`
+- `outputs/property_retrain/retrain_report.json`
 
 ### 3) Run MAPLE with trained checkpoint
 ```bash
