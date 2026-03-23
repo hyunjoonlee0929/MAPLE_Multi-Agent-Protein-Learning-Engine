@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MAPLE DBTL Test Record",
+  "type": "object",
+  "required": ["sequence", "stability", "activity"],
+  "properties": {
+    "experiment_id": { "type": ["string", "null"] },
+    "sequence": { "type": "string", "minLength": 1 },
+    "stability": { "type": "number" },
+    "activity": { "type": "number" },
+    "split": {
+      "type": "string",
+      "enum": ["train", "val"]
+    },
+    "source": { "type": "string" },
+    "timestamp": { "type": ["string", "null"] },
+    "assay": { "type": ["string", "null"] }
+  },
+  "additionalProperties": true
+}

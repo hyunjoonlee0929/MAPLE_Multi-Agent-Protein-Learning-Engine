@@ -294,6 +294,38 @@ Outputs:
 - `outputs/closed_loop_campaign/train_dataset_final.csv`
 - per-round model checkpoints and MAPLE artifacts
 
+## DBTL Ingestion and Auto-Retrain Trigger
+DBTL test records can be ingested to automatically refresh the property model.
+
+DBTL record schema:
+- `sequence` (required)
+- `stability` (required)
+- `activity` (required)
+- optional: `experiment_id`, `split` (`train|val`), `source`, `timestamp`, `assay`
+
+Reference schema file:
+- `docs/dbtl_record_schema.json`
+
+Example DBTL CSV:
+- `data/sample_dbtl_results.csv`
+
+Run ingestion + retrain trigger:
+```bash
+cd MAPLE
+python3 scripts/dbtl_ingest_retrain.py \
+  --seed-data data/sample_property_labels.csv \
+  --dbtl-input data/sample_dbtl_results.csv \
+  --dbtl-format auto \
+  --output-dir outputs/dbtl_ingest \
+  --checkpoint-out checkpoints/property_linear_dbtl.npz
+```
+
+Outputs:
+- `outputs/dbtl_ingest/dbtl_retrain_report.json`
+- `outputs/dbtl_ingest/train_dataset_merged.csv`
+- `outputs/dbtl_ingest/val_dataset_merged.csv`
+- `checkpoints/property_linear_dbtl.npz` (when trigger condition is met)
+
 ### 3) Run MAPLE with trained checkpoint
 ```bash
 cd MAPLE
