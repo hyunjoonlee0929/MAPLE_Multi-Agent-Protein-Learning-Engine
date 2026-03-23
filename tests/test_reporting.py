@@ -32,6 +32,10 @@ def test_reporting_exports_json_csv_and_summary(tmp_path: Path) -> None:
         "sequences": ["AAAA"],
         "scores": [0.9],
         "history": history,
+        "validation_reports": {
+            "leaderboard": {"best_checkpoint": "a.npz", "best_val_rmse": 0.1},
+            "cv_report": {"val_rmse_mean": 0.2, "val_rmse_std": 0.03},
+        },
     }
 
     json_path = tmp_path / "history.json"
@@ -49,6 +53,7 @@ def test_reporting_exports_json_csv_and_summary(tmp_path: Path) -> None:
     payload = json.loads(summary_path.read_text(encoding="utf-8"))
     assert payload["best_sequence"] == "AAAA"
     assert payload["best_score"] == 0.9
+    assert payload["validation_reports"]["leaderboard"]["best_checkpoint"] == "a.npz"
 
     csv_text = csv_path.read_text(encoding="utf-8")
     assert "constraint_pass_rate" in csv_text

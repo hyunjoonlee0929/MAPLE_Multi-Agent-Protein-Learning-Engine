@@ -385,6 +385,8 @@ if run_clicked:
         "property_checkpoint": property_checkpoint.strip() or None,
         "uncertainty_samples": int(uncertainty_samples),
         "uncertainty_noise": float(uncertainty_noise),
+        "validation_leaderboard_path": leaderboard_report_path.strip(),
+        "validation_cv_report_path": cv_report_path.strip(),
     }
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -15,6 +15,7 @@ from agents.planner import PlannerAgent
 from agents.property_agent import PropertyAgent
 from agents.sequence_agent import SequenceAgent
 from agents.structure_agent import StructureAgent
+from core.experiment_tracking import attach_validation_metadata, build_validation_metadata
 from core.pipeline import MaplePipeline, PipelineConfig
 from core.reporting import export_final_summary, export_history_csv, export_history_json
 from core.state import create_initial_state
@@ -173,6 +174,8 @@ def run_maple(
         "structure_retries": _pick("structure_retries", model_cfg.get("structure_retries", 0)),
     }
     structure_batch_size = int(_pick("structure_batch_size", model_cfg.get("structure_batch_size", 16)))
+    validation_leaderboard_path = _pick("validation_leaderboard_path", None)
+    validation_cv_report_path = _pick("validation_cv_report_path", None)
 
     state = create_initial_state(seed_sequence)
     state["config"] = runtime_cfg
@@ -199,6 +202,21 @@ def run_maple(
 
     final_state = pipeline.run(state)
 
+    validation_metadata = build_validation_metadata(
+        root=Path(__file__).parent,
+        leaderboard_path_text=(
+            str(validation_leaderboard_path).strip()
+            if validation_leaderboard_path is not None
+            else None
+        ),
+        cv_report_path_text=(
+            str(validation_cv_report_path).strip()
+            if validation_cv_report_path is not None
+            else None
+        ),
+    )
+    attach_validation_metadata(final_state, validation_metadata)
+
     resolved_output_dir = Path(output_dir)
     if not resolved_output_dir.is_absolute():
         resolved_output_dir = Path(__file__).parent / resolved_output_dir
@@ -213,6 +231,7 @@ def run_maple(
         "structure_backend": structure_backend,
         "selection_strategy": runtime_cfg.get("selection_strategy", "elitist"),
         "output_dir": str(resolved_output_dir),
+        "validation_linked": bool(validation_metadata),
     }
     return final_state, resolved, resolved_output_dir
 
@@ -262,6 +281,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--structure-timeout-sec", type=int, default=None, help="Timeout per structure external call")
     parser.add_argument("--structure-retries", type=int, default=None, help="Retry count for structure external calls")
     parser.add_argument("--structure-batch-size", type=int, default=None, help="Batch size for structure prediction loop")
+    parser.add_argument("--validation-leaderboard-path", type=str, default=None, help="Optional validation_leaderboard.json path")
+    parser.add_argument("--validation-cv-report-path", type=str, default=None, help="Optional property_cv_report.json path")
     parser.add_argument("--output-dir", type=str, default="outputs", help="Artifact directory")
 
     return parser.parse_args()
@@ -317,6 +338,8 @@ def main() -> None:
         "structure_timeout_sec": args.structure_timeout_sec,
         "structure_retries": args.structure_retries,
         "structure_batch_size": args.structure_batch_size,
+        "validation_leaderboard_path": args.validation_leaderboard_path,
+        "validation_cv_report_path": args.validation_cv_report_path,
     }
 
     final_state, resolved, output_dir = run_maple(

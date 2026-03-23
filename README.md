@@ -243,6 +243,14 @@ The Streamlit UI also supports entering the checkpoint path in the sidebar.
 - Sidebar button to generate validation reports directly from UI
 - Downloadable artifacts (`history.json`, `summary.json`)
 
+`summary.json` now includes `validation_reports` when report paths are provided.
+`history.json`/`history.csv` include per-iteration tracking fields:
+- `validation_linked`
+- `validation_best_checkpoint`
+- `validation_best_val_rmse`
+- `validation_cv_rmse_mean`
+- `validation_cv_rmse_std`
+
 ## Key Files
 - `main.py`: reusable run service + CLI entrypoint
 - `app.py`: Streamlit UI dashboard
