@@ -49,6 +49,11 @@ def split_train_val(
     seed: int,
 ) -> tuple[list[str], np.ndarray, list[str], np.ndarray]:
     n = len(sequences)
+    train_idx, val_idx = split_indices(n=n, val_ratio=val_ratio, seed=seed)
+    return split_train_val_with_indices(sequences, targets, train_idx, val_idx)
+
+
+def split_indices(n: int, val_ratio: float, seed: int) -> tuple[np.ndarray, np.ndarray]:
     if n < 2:
         raise ValueError("Need at least 2 samples for train/validation split")
 
@@ -62,6 +67,18 @@ def split_train_val(
 
     val_idx = idx[:val_count]
     train_idx = idx[val_count:]
+    return train_idx, val_idx
+
+
+def split_train_val_with_indices(
+    sequences: list[str],
+    targets: np.ndarray,
+    train_idx: np.ndarray,
+    val_idx: np.ndarray,
+) -> tuple[list[str], np.ndarray, list[str], np.ndarray]:
+    n = len(sequences)
+    if targets.shape[0] != n:
+        raise ValueError("targets length must match sequences length")
 
     train_seq = [sequences[int(i)] for i in train_idx]
     val_seq = [sequences[int(i)] for i in val_idx]

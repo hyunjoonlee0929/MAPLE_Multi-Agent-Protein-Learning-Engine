@@ -173,6 +173,27 @@ Outputs:
 - `checkpoints/property_linear_best.npz`
 - `outputs/property_retrain/retrain_report.json`
 
+### 2-1a) Create fixed validation split (reusable)
+```bash
+cd MAPLE
+python3 scripts/make_validation_split.py \
+  --data data/sample_property_labels.csv \
+  --val-ratio 0.2 \
+  --split-seed 42 \
+  --output outputs/property_validation/fixed_val_split.json
+```
+
+Then use the same validation split for retraining:
+```bash
+cd MAPLE
+python3 scripts/retrain_property_pipeline.py \
+  --data data/sample_property_labels.csv \
+  --ridge-alphas "1e-4,1e-3,1e-2,1e-1" \
+  --val-index-file outputs/property_validation/fixed_val_split.json \
+  --checkpoint-out checkpoints/property_linear_best.npz \
+  --output-dir outputs/property_retrain
+```
+
 ### 2-2) Checkpoint Validation Leaderboard
 ```bash
 cd MAPLE
@@ -187,6 +208,19 @@ python3 scripts/evaluate_property_checkpoints.py \
 Outputs:
 - `outputs/property_validation/validation_leaderboard.json`
 - `outputs/property_validation/validation_leaderboard.csv`
+
+### 2-3) Cross-seed reproducibility report
+```bash
+cd MAPLE
+python3 scripts/property_cv_report.py \
+  --data data/sample_property_labels.csv \
+  --split-seeds "1,7,13,21,42" \
+  --ridge-alphas "1e-4,1e-3,1e-2,1e-1" \
+  --output-dir outputs/property_cv
+```
+
+Output:
+- `outputs/property_cv/property_cv_report.json`
 
 ### 3) Run MAPLE with trained checkpoint
 ```bash

@@ -20,6 +20,7 @@ from scripts.train_property_numpy import (
     load_dataset,
     predict_linear,
     split_train_val,
+    split_train_val_with_indices,
 )
 from utils.metrics import evaluate_property_metrics
 
@@ -45,6 +46,12 @@ def main() -> None:
     parser.add_argument("--val-ratio", type=float, default=0.2)
     parser.add_argument("--split-seed", type=int, default=42)
     parser.add_argument(
+        "--val-index-file",
+        type=str,
+        default="",
+        help="Optional JSON file with fixed validation indices",
+    )
+    parser.add_argument(
         "--ridge-alphas",
         type=str,
         default="1e-4,1e-3,1e-2,1e-1",
@@ -67,12 +74,32 @@ def main() -> None:
     checkpoint_out.parent.mkdir(parents=True, exist_ok=True)
 
     sequences, targets = load_dataset(data_path)
-    train_sequences, train_targets, val_sequences, val_targets = split_train_val(
-        sequences,
-        targets,
-        val_ratio=float(args.val_ratio),
-        seed=int(args.split_seed),
-    )
+    val_index_file = str(args.val_index_file).strip()
+    if val_index_file:
+        val_index_path = Path(val_index_file)
+        if not val_index_path.is_absolute():
+            val_index_path = ROOT / val_index_path
+        split_payload = json.loads(val_index_path.read_text(encoding="utf-8"))
+        val_idx = np.asarray(split_payload.get("val_indices", []), dtype=np.int64)
+        if val_idx.size == 0:
+            raise ValueError("val-index-file has empty val_indices")
+        n = len(sequences)
+        mask = np.ones((n,), dtype=bool)
+        mask[val_idx] = False
+        train_idx = np.arange(n, dtype=np.int64)[mask]
+        train_sequences, train_targets, val_sequences, val_targets = split_train_val_with_indices(
+            sequences,
+            targets,
+            train_idx=train_idx,
+            val_idx=val_idx,
+        )
+    else:
+        train_sequences, train_targets, val_sequences, val_targets = split_train_val(
+            sequences,
+            targets,
+            val_ratio=float(args.val_ratio),
+            seed=int(args.split_seed),
+        )
     embedder = RandomEmbeddingModel(embedding_dim=int(args.embedding_dim))
     train_features = np.stack([embedder.encode(seq) for seq in train_sequences]).astype(np.float32)
     val_features = np.stack([embedder.encode(seq) for seq in val_sequences]).astype(np.float32)
@@ -119,6 +146,7 @@ def main() -> None:
             "val_count": int(val_targets.shape[0]),
             "val_ratio": float(args.val_ratio),
             "split_seed": int(args.split_seed),
+            "val_index_file": (val_index_file or None),
         },
         "search_space": {"ridge_alphas": alpha_grid},
         "trials": trials,
