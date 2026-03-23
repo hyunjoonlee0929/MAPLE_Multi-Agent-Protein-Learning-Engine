@@ -29,6 +29,22 @@ def test_planner_agent_sets_defaults() -> None:
 
 
 
+def test_planner_agent_applies_preset_and_normalizes_weights() -> None:
+    state = create_initial_state("MKTFFV")
+    state["config"] = {
+        "scoring_preset": "activity_first",
+        "use_weight_preset": True,
+        "normalize_score_weights": True,
+    }
+    updated = PlannerAgent().run(state)
+
+    keys = ["w_stability", "w_activity", "w_uncertainty", "w_structure", "w_plddt", "w_ptm", "w_pae"]
+    total = sum(float(updated["config"][k]) for k in keys)
+    assert abs(total - 1.0) < 1e-8
+    assert updated["config"]["w_activity"] > updated["config"]["w_stability"]
+
+
+
 def test_sequence_agent_generates_configured_candidate_count() -> None:
     state = create_initial_state("MKTFFV")
     state["config"] = {"num_candidates": 5, "mutation_rate": 1}
@@ -205,6 +221,7 @@ def test_optimization_agent_generates_next_population() -> None:
     state["sequences"] = ["MKTFFV", "MKTFFI", "MKTFFL"]
     state["structures"] = [{}, {}, {}]
     state["properties"] = [{}, {}, {}]
+    state["scores"] = [0.9, 0.8, 0.7]
 
     updated = OptimizationAgent(random_seed=3).run(state)
 
@@ -223,9 +240,11 @@ def test_optimization_agent_respects_constraints_when_enabled() -> None:
         "mutation_rate": 1,
         "selection_strategy": "elitist",
         "constraint_enabled": True,
+        "constraint_mode": "hard",
         "min_stability": 0.7,
     }
     state["sequences"] = ["BAD", "GOOD", "OK"]
+    state["scores"] = [0.9, 0.8, 0.7]
     state["structures"] = [{"confidence": 0.9}, {"confidence": 0.9}, {"confidence": 0.9}]
     state["properties"] = [
         {"stability": 0.2, "activity": 1.0},
@@ -240,6 +259,34 @@ def test_optimization_agent_respects_constraints_when_enabled() -> None:
 
 
 
+def test_optimization_agent_soft_constraints_apply_penalty() -> None:
+    state = create_initial_state("AAAA")
+    state["iteration"] = 0
+    state["config"] = {
+        "top_k": 2,
+        "num_candidates": 4,
+        "mutation_rate": 1,
+        "selection_strategy": "elitist",
+        "constraint_enabled": True,
+        "constraint_mode": "soft",
+        "constraint_penalty": 1.0,
+        "min_stability": 0.8,
+    }
+    state["sequences"] = ["SEQ1", "SEQ2", "SEQ3"]
+    state["scores"] = [0.9, 0.8, 0.7]
+    state["structures"] = [{}, {}, {}]
+    state["properties"] = [
+        {"stability": 0.1, "activity": 1.0},
+        {"stability": 0.8, "activity": 1.0},
+        {"stability": 0.75, "activity": 1.0},
+    ]
+
+    updated = OptimizationAgent(random_seed=1).run(state)
+    assert updated["next_sequences"][0] == "SEQ2"
+    assert updated["constraint_summary"]["mode"] == "soft"
+
+
+
 def test_optimization_agent_diverse_strategy_respects_distance() -> None:
     state = create_initial_state("AAAA")
     state["iteration"] = 0
@@ -251,6 +298,7 @@ def test_optimization_agent_diverse_strategy_respects_distance() -> None:
         "min_hamming_distance": 2,
     }
     state["sequences"] = ["AAAA", "AAAT", "AATT", "TTTT"]
+    state["scores"] = [0.9, 0.8, 0.7, 0.6]
     state["structures"] = [{}, {}, {}, {}]
     state["properties"] = [{}, {}, {}, {}]
 

@@ -12,7 +12,13 @@ runtime:
   selection_strategy: "diverse"
   min_hamming_distance: 2
 
+  scoring_preset: "balanced"
+  use_weight_preset: true
+  normalize_score_weights: true
+
   constraint_enabled: false
+  constraint_mode: "hard"
+  constraint_penalty: 0.20
   min_stability: null
   min_activity: null
   min_structure_confidence: null

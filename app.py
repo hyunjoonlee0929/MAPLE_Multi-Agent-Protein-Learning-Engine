@@ -81,6 +81,20 @@ with st.sidebar:
         options=["diverse", "elitist"],
         index=0 if runtime.get("selection_strategy", "diverse") == "diverse" else 1,
     )
+    scoring_preset = st.selectbox(
+        "Scoring Preset",
+        options=["balanced", "exploration", "structure_first", "activity_first"],
+        index=["balanced", "exploration", "structure_first", "activity_first"].index(
+            str(runtime.get("scoring_preset", "balanced"))
+            if str(runtime.get("scoring_preset", "balanced")) in {"balanced", "exploration", "structure_first", "activity_first"}
+            else "balanced"
+        ),
+    )
+    use_weight_preset = st.checkbox("Use Weight Preset", value=bool(runtime.get("use_weight_preset", True)))
+    normalize_score_weights = st.checkbox(
+        "Normalize Score Weights",
+        value=bool(runtime.get("normalize_score_weights", True)),
+    )
     min_hamming_distance = st.slider(
         "Min Hamming Distance",
         min_value=0,
@@ -88,6 +102,20 @@ with st.sidebar:
         value=int(runtime.get("min_hamming_distance", 2)),
     )
     constraint_enabled = st.checkbox("Enable Constraints", value=bool(runtime.get("constraint_enabled", False)))
+    constraint_mode = st.selectbox(
+        "Constraint Mode",
+        options=["hard", "soft"],
+        index=0 if str(runtime.get("constraint_mode", "hard")).lower() == "hard" else 1,
+        disabled=not constraint_enabled,
+    )
+    constraint_penalty = st.slider(
+        "Constraint Penalty (soft mode)",
+        min_value=0.0,
+        max_value=2.0,
+        value=float(runtime.get("constraint_penalty", 0.20)),
+        step=0.01,
+        disabled=not constraint_enabled or constraint_mode != "soft",
+    )
     min_stability = st.slider("Min Stability", min_value=-5.0, max_value=5.0, value=float(runtime.get("min_stability", -5.0)), step=0.05)
     min_activity = st.slider("Min Activity", min_value=-5.0, max_value=5.0, value=float(runtime.get("min_activity", -5.0)), step=0.05)
     min_structure_confidence = st.slider(
@@ -168,8 +196,13 @@ if run_clicked:
         "top_k": int(top_k),
         "mutation_rate": int(mutation_rate),
         "selection_strategy": selection_strategy,
+        "scoring_preset": scoring_preset,
+        "use_weight_preset": bool(use_weight_preset),
+        "normalize_score_weights": bool(normalize_score_weights),
         "min_hamming_distance": int(min_hamming_distance),
         "constraint_enabled": bool(constraint_enabled),
+        "constraint_mode": constraint_mode,
+        "constraint_penalty": None if not constraint_enabled else float(constraint_penalty),
         "min_stability": None if not constraint_enabled else float(min_stability),
         "min_activity": None if not constraint_enabled else float(min_activity),
         "min_structure_confidence": None if not constraint_enabled else float(min_structure_confidence),

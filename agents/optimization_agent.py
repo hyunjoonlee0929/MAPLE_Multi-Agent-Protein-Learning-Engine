@@ -20,9 +20,8 @@ class OptimizationAgent:
         except (TypeError, ValueError):
             return None
 
-    def _passes_constraints(self, prop: dict, structure: dict, config: dict) -> bool:
-        if not bool(config.get("constraint_enabled", False)):
-            return True
+    def _constraint_violations(self, prop: dict, structure: dict, config: dict) -> dict[str, float]:
+        violations: dict[str, float] = {}
 
         min_stability = self._as_float(config.get("min_stability"))
         min_activity = self._as_float(config.get("min_activity"))
@@ -39,19 +38,21 @@ class OptimizationAgent:
         pae = self._as_float(structure.get("pae_mean"))
 
         if min_stability is not None and (stability is None or stability < min_stability):
-            return False
+            violations["min_stability"] = 1.0 if stability is None else float(min_stability - stability)
         if min_activity is not None and (activity is None or activity < min_activity):
-            return False
+            violations["min_activity"] = 1.0 if activity is None else float(min_activity - activity)
         if min_structure_confidence is not None and (confidence is None or confidence < min_structure_confidence):
-            return False
+            violations["min_structure_confidence"] = (
+                1.0 if confidence is None else float(min_structure_confidence - confidence)
+            )
         if min_plddt is not None and (plddt is None or plddt < min_plddt):
-            return False
+            violations["min_plddt"] = 1.0 if plddt is None else float(min_plddt - plddt)
         if min_ptm is not None and (ptm is None or ptm < min_ptm):
-            return False
+            violations["min_ptm"] = 1.0 if ptm is None else float(min_ptm - ptm)
         if max_pae is not None and (pae is None or pae > max_pae):
-            return False
+            violations["max_pae"] = 1.0 if pae is None else float(pae - max_pae)
 
-        return True
+        return violations
 
     def _select_elites(self, ranked_sequences: list[str], top_k: int, strategy: str, min_distance: int) -> list[str]:
         if not ranked_sequences:
@@ -69,35 +70,64 @@ class OptimizationAgent:
         mutation_rate = int(config.get("mutation_rate", 1))
         min_distance = int(config.get("min_hamming_distance", 0))
         strategy = str(config.get("selection_strategy", "elitist")).strip().lower()
+        constraint_enabled = bool(config.get("constraint_enabled", False))
+        constraint_mode = str(config.get("constraint_mode", "hard")).strip().lower()
+        constraint_penalty = float(config.get("constraint_penalty", 0.20))
         iteration = int(state.get("iteration", 0))
 
         sequences = state.get("sequences", [])
         structures = state.get("structures", [])
         properties = state.get("properties", [])
+        scores = state.get("scores", [])
 
         if not sequences:
             state["next_sequences"] = []
             return state
 
-        ranked_aligned = list(zip(sequences, structures, properties))
-        constrained_sequences = [
-            seq for seq, structure, prop in ranked_aligned if self._passes_constraints(prop, structure, config)
-        ]
+        ranked_aligned = list(zip(sequences, structures, properties, scores))
+        passed: list[tuple[str, float]] = []
+        all_ranked: list[tuple[str, float, dict[str, float]]] = []
+        violation_counts: dict[str, int] = {
+            "min_stability": 0,
+            "min_activity": 0,
+            "min_structure_confidence": 0,
+            "min_plddt": 0,
+            "min_ptm": 0,
+            "max_pae": 0,
+        }
 
-        if constrained_sequences:
-            candidate_pool = constrained_sequences
+        for seq, structure, prop, score in ranked_aligned:
+            violations = self._constraint_violations(prop, structure, config) if constraint_enabled else {}
+            for k in violations:
+                violation_counts[k] += 1
+
+            if not violations:
+                passed.append((seq, float(score)))
+
+            total_violation = sum(violations.values())
+            penalized = float(score) - constraint_penalty * total_violation
+            all_ranked.append((seq, penalized, violations))
+
+        if constraint_enabled and constraint_mode == "hard":
+            candidate_ranked_sequences = [seq for seq, _score in passed] if passed else list(sequences)
+        elif constraint_enabled and constraint_mode == "soft":
+            sorted_soft = sorted(all_ranked, key=lambda x: x[1], reverse=True)
+            candidate_ranked_sequences = [seq for seq, _penalized, _viol in sorted_soft]
         else:
-            candidate_pool = sequences
+            candidate_ranked_sequences = list(sequences)
 
         state["constraint_summary"] = {
-            "enabled": bool(config.get("constraint_enabled", False)),
-            "passed": len(constrained_sequences),
+            "enabled": constraint_enabled,
+            "mode": constraint_mode,
+            "penalty": constraint_penalty,
+            "passed": len(passed),
             "total": len(sequences),
+            "violation_counts": violation_counts,
         }
 
         elites = self._select_elites(
-            ranked_sequences=candidate_pool,
-            top_k=max(1, min(top_k, len(candidate_pool))),
+            ranked_sequences=candidate_ranked_sequences,
+            top_k=max(1, min(top_k, len(candidate_ranked_sequences))),
             strategy=strategy,
             min_distance=min_distance,
         )

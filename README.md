@@ -86,6 +86,8 @@ Optimization can enforce feasibility constraints before selecting elites.
 
 Runtime constraints:
 - `constraint_enabled`
+- `constraint_mode` (`hard` or `soft`)
+- `constraint_penalty` (used in `soft` mode)
 - `min_stability`
 - `min_activity`
 - `min_structure_confidence`
@@ -103,6 +105,22 @@ python3 main.py \
   --max-pae 20 \
   --min-stability 0.2 \
   --min-activity 0.2
+```
+
+In `soft` mode, violating candidates are not dropped, but their scores are penalized.
+
+## Scoring Presets
+You can use preset profiles and automatic weight normalization:
+- `balanced`
+- `exploration`
+- `structure_first`
+- `activity_first`
+
+CLI examples:
+```bash
+cd MAPLE
+python3 main.py --scoring-preset structure_first
+python3 main.py --scoring-preset exploration --disable-score-weight-normalization
 ```
 
 ## Upgrade Step: Labeled Property Model

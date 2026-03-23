@@ -137,7 +137,12 @@ def run_maple(
         "mutation_rate",
         "selection_strategy",
         "min_hamming_distance",
+        "scoring_preset",
+        "use_weight_preset",
+        "normalize_score_weights",
         "constraint_enabled",
+        "constraint_mode",
+        "constraint_penalty",
         "min_stability",
         "min_activity",
         "min_structure_confidence",
@@ -226,7 +231,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mutation-rate", type=int, default=None, help="Override mutations per sequence")
     parser.add_argument("--selection-strategy", type=str, default=None, help="Elite selection strategy")
     parser.add_argument("--min-hamming-distance", type=int, default=None, help="Minimum Hamming distance")
+    parser.add_argument("--scoring-preset", type=str, default=None, help="Scoring preset: balanced|exploration|structure_first|activity_first")
+    parser.add_argument("--disable-weight-preset", action="store_true", help="Disable preset auto-fill for score weights")
+    parser.add_argument("--disable-score-weight-normalization", action="store_true", help="Disable automatic normalization of score weights")
     parser.add_argument("--constraint-enabled", action="store_true", default=None, help="Enable constrained optimization")
+    parser.add_argument("--constraint-mode", type=str, default=None, help="Constraint mode: hard|soft")
+    parser.add_argument("--constraint-penalty", type=float, default=None, help="Penalty multiplier in soft mode")
     parser.add_argument("--min-stability", type=float, default=None, help="Minimum stability constraint")
     parser.add_argument("--min-activity", type=float, default=None, help="Minimum activity constraint")
     parser.add_argument("--min-structure-confidence", type=float, default=None, help="Minimum structure confidence constraint")
@@ -278,7 +288,12 @@ def main() -> None:
         "mutation_rate": args.mutation_rate,
         "selection_strategy": args.selection_strategy,
         "min_hamming_distance": args.min_hamming_distance,
+        "scoring_preset": args.scoring_preset,
+        "use_weight_preset": (None if not args.disable_weight_preset else False),
+        "normalize_score_weights": (None if not args.disable_score_weight_normalization else False),
         "constraint_enabled": args.constraint_enabled,
+        "constraint_mode": args.constraint_mode,
+        "constraint_penalty": args.constraint_penalty,
         "min_stability": args.min_stability,
         "min_activity": args.min_activity,
         "min_structure_confidence": args.min_structure_confidence,
