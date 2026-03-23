@@ -15,11 +15,15 @@ class PropertyAgent:
         self,
         embedding_dim: int = 128,
         property_checkpoint: str | None = None,
+        uncertainty_samples: int = 5,
+        uncertainty_noise: float = 0.02,
     ) -> None:
         self.embedding_model = RandomEmbeddingModel(embedding_dim=embedding_dim)
         self.predictor = PropertyPredictor(
             embedding_dim=embedding_dim,
             checkpoint_path=property_checkpoint,
+            uncertainty_samples=uncertainty_samples,
+            uncertainty_noise=uncertainty_noise,
         )
 
     def run(self, state: dict) -> dict:
@@ -28,13 +32,14 @@ class PropertyAgent:
 
         if embeddings:
             batch = np.stack(embeddings).astype(np.float32)
-            preds = np.asarray(self.predictor.predict(batch), dtype=np.float32)
+            preds, unc = self.predictor.predict_with_uncertainty(batch)
             properties = [
                 {
-                    "stability": float(item[0]),
-                    "activity": float(item[1]),
+                    "stability": float(preds[idx][0]),
+                    "activity": float(preds[idx][1]),
+                    "uncertainty": float(unc[idx]),
                 }
-                for item in preds
+                for idx in range(len(preds))
             ]
         else:
             properties = []

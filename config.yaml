@@ -9,8 +9,15 @@ runtime:
   num_candidates: 10
   top_k: 3
   mutation_rate: 1
+  selection_strategy: "diverse"
+  min_hamming_distance: 2
+  w_stability: 0.45
+  w_activity: 0.45
+  w_uncertainty: 0.10
 
 model:
   embedding_dim: 128
   structure_backend: "dummy"
   property_checkpoint: ""
+  uncertainty_samples: 5
+  uncertainty_noise: 0.02

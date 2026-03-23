@@ -81,7 +81,12 @@ class PropertyPredictor:
         embedding_dim: int = 128,
         hidden_dim: int = 64,
         checkpoint_path: str | None = None,
+        uncertainty_samples: int = 5,
+        uncertainty_noise: float = 0.02,
     ) -> None:
+        self.uncertainty_samples = max(1, uncertainty_samples)
+        self.uncertainty_noise = max(0.0, uncertainty_noise)
+
         if TORCH_AVAILABLE:
             backend = TorchPropertyPredictor(
                 embedding_dim=embedding_dim,
@@ -102,3 +107,25 @@ class PropertyPredictor:
 
     def predict(self, embedding_batch):
         return self.backend.predict(embedding_batch)
+
+    def predict_with_uncertainty(self, embedding_batch) -> tuple[np.ndarray, np.ndarray]:
+        """Estimate predictive uncertainty via noisy input Monte Carlo passes."""
+        x = np.asarray(embedding_batch, dtype=np.float32)
+        if x.size == 0:
+            return np.empty((0, 2), dtype=np.float32), np.empty((0,), dtype=np.float32)
+
+        if self.uncertainty_samples <= 1 or self.uncertainty_noise <= 0:
+            preds = np.asarray(self.predict(x), dtype=np.float32)
+            unc = np.zeros((preds.shape[0],), dtype=np.float32)
+            return preds, unc
+
+        samples = []
+        for _ in range(self.uncertainty_samples):
+            noise = np.random.normal(0.0, self.uncertainty_noise, size=x.shape).astype(np.float32)
+            sample = np.asarray(self.predict(x + noise), dtype=np.float32)
+            samples.append(sample)
+
+        stacked = np.stack(samples, axis=0)
+        mean_preds = np.mean(stacked, axis=0)
+        unc = np.mean(np.std(stacked, axis=0), axis=1)
+        return mean_preds.astype(np.float32), unc.astype(np.float32)

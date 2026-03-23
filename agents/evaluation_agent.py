@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from utils.mutation import AMINO_ACIDS
-from utils.scoring import combined_score
+from utils.scoring import combined_score_with_uncertainty
 
 
 class EvaluationAgent:
@@ -41,9 +41,23 @@ class EvaluationAgent:
             )
             return state
 
+        config = state.get("config", {})
+        w_stability = float(config.get("w_stability", 0.45))
+        w_activity = float(config.get("w_activity", 0.45))
+        w_uncertainty = float(config.get("w_uncertainty", 0.10))
+
         stability = [item[3]["stability"] for item in aligned]
         activity = [item[3]["activity"] for item in aligned]
-        scores = combined_score(stability, activity)
+        uncertainty = [float(item[3].get("uncertainty", 0.0)) for item in aligned]
+
+        scores = combined_score_with_uncertainty(
+            stability=stability,
+            activity=activity,
+            uncertainty=uncertainty,
+            w_stability=w_stability,
+            w_activity=w_activity,
+            w_uncertainty=w_uncertainty,
+        )
 
         ranked = sorted(
             zip(aligned, scores.tolist()),
@@ -62,6 +76,7 @@ class EvaluationAgent:
                 "iteration": int(state.get("iteration", 0)),
                 "best_sequence": state["sequences"][0],
                 "best_score": state["scores"][0],
+                "best_uncertainty": float(state["properties"][0].get("uncertainty", 0.0)),
                 "mean_score": float(sum(state["scores"]) / len(state["scores"])),
                 "num_candidates": len(state["sequences"]),
             }

@@ -33,3 +33,19 @@ def combined_score(
     s_norm = minmax_normalize(stability)
     a_norm = minmax_normalize(activity)
     return w_stability * s_norm + w_activity * a_norm
+
+
+
+def combined_score_with_uncertainty(
+    stability: Iterable[float],
+    activity: Iterable[float],
+    uncertainty: Iterable[float],
+    w_stability: float = 0.45,
+    w_activity: float = 0.45,
+    w_uncertainty: float = 0.10,
+) -> np.ndarray:
+    """Weighted score with exploration bonus from normalized uncertainty."""
+    s_norm = minmax_normalize(stability)
+    a_norm = minmax_normalize(activity)
+    u_norm = minmax_normalize(uncertainty)
+    return w_stability * s_norm + w_activity * a_norm + w_uncertainty * u_norm

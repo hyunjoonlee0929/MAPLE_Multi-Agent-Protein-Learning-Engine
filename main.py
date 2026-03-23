@@ -117,6 +117,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-candidates", type=int, default=None, help="Override candidates per iteration")
     parser.add_argument("--top-k", type=int, default=None, help="Override top-k elite count")
     parser.add_argument("--mutation-rate", type=int, default=None, help="Override mutations per sequence")
+    parser.add_argument(
+        "--selection-strategy",
+        type=str,
+        default=None,
+        help="Elite selection strategy: elitist|diverse",
+    )
+    parser.add_argument(
+        "--min-hamming-distance",
+        type=int,
+        default=None,
+        help="Minimum Hamming distance when using diverse selection",
+    )
 
     parser.add_argument("--embedding-dim", type=int, default=None, help="Override embedding dimension")
     parser.add_argument(
@@ -124,6 +136,18 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help="Optional PyTorch checkpoint path for property predictor",
+    )
+    parser.add_argument(
+        "--uncertainty-samples",
+        type=int,
+        default=None,
+        help="MC sample count for uncertainty estimation",
+    )
+    parser.add_argument(
+        "--uncertainty-noise",
+        type=float,
+        default=None,
+        help="Input noise std for uncertainty estimation",
     )
     parser.add_argument(
         "--structure-backend",
@@ -166,6 +190,10 @@ def main() -> None:
         runtime_cfg["top_k"] = args.top_k
     if args.mutation_rate is not None:
         runtime_cfg["mutation_rate"] = args.mutation_rate
+    if args.selection_strategy is not None:
+        runtime_cfg["selection_strategy"] = args.selection_strategy
+    if args.min_hamming_distance is not None:
+        runtime_cfg["min_hamming_distance"] = args.min_hamming_distance
 
     model_cfg = dict(config.get("model", {}))
     embedding_dim = int(
@@ -173,6 +201,16 @@ def main() -> None:
     )
     property_checkpoint = args.property_checkpoint or model_cfg.get("property_checkpoint")
     structure_backend = args.structure_backend or model_cfg.get("structure_backend", "dummy")
+    uncertainty_samples = int(
+        args.uncertainty_samples
+        if args.uncertainty_samples is not None
+        else model_cfg.get("uncertainty_samples", 5)
+    )
+    uncertainty_noise = float(
+        args.uncertainty_noise
+        if args.uncertainty_noise is not None
+        else model_cfg.get("uncertainty_noise", 0.02)
+    )
 
     state = create_initial_state(seed_sequence)
     state["config"] = runtime_cfg
@@ -185,6 +223,8 @@ def main() -> None:
         property_agent=PropertyAgent(
             embedding_dim=embedding_dim,
             property_checkpoint=property_checkpoint,
+            uncertainty_samples=uncertainty_samples,
+            uncertainty_noise=uncertainty_noise,
         ),
         optimization_agent=OptimizationAgent(random_seed=seed + 29),
         evaluation_agent=EvaluationAgent(),
@@ -212,6 +252,7 @@ def main() -> None:
     print(f"Iterations: {num_iterations}")
     print(f"Seed: {seed}")
     print(f"Structure backend: {structure_backend}")
+    print(f"Selection strategy: {runtime_cfg.get('selection_strategy', 'elitist')}")
     print(f"Final best sequence: {final_state['sequences'][0] if final_state['sequences'] else 'N/A'}")
     print(f"Final best score: {final_state['scores'][0] if final_state['scores'] else 'N/A'}")
     print(f"Artifacts: {output_dir}")
