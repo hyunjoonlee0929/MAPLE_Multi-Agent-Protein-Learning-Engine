@@ -16,7 +16,7 @@ if str(ROOT) not in sys.path:
 
 from core.active_learning import propose_active_learning_batch, synthetic_property_oracle
 from core.retraining import select_best_trial
-from models.embedding_model import RandomEmbeddingModel
+from models.embedding_model import build_embedding_model
 from scripts.retrain_property_pipeline import parse_alpha_grid
 from scripts.train_property_numpy import (
     fit_ridge_regression,
@@ -33,9 +33,21 @@ def _train_and_eval(
     val_sequences: list[str],
     val_targets: np.ndarray,
     embedding_dim: int,
+    embedding_backend: str,
+    embedding_model_id: str | None,
+    embedding_device: str,
+    embedding_pooling: str,
+    embedding_allow_mock: bool,
     ridge_alphas: list[float],
 ) -> tuple[np.ndarray, np.ndarray, dict]:
-    embedder = RandomEmbeddingModel(embedding_dim=embedding_dim)
+    embedder = build_embedding_model(
+        backend=embedding_backend,
+        embedding_dim=embedding_dim,
+        model_id=embedding_model_id,
+        device=embedding_device,
+        pooling=embedding_pooling,
+        allow_mock=embedding_allow_mock,
+    )
     train_x = np.stack([embedder.encode(seq) for seq in train_sequences]).astype(np.float32)
     val_x = np.stack([embedder.encode(seq) for seq in val_sequences]).astype(np.float32)
 
@@ -89,6 +101,11 @@ def main() -> None:
     parser.add_argument("--output-dir", type=str, default="outputs/active_learning")
     parser.add_argument("--checkpoint-out", type=str, default="checkpoints/property_linear_active_learning.npz")
     parser.add_argument("--embedding-dim", type=int, default=128)
+    parser.add_argument("--embedding-backend", type=str, default="random")
+    parser.add_argument("--embedding-model-id", type=str, default="")
+    parser.add_argument("--embedding-device", type=str, default="cpu")
+    parser.add_argument("--embedding-pooling", type=str, default="mean")
+    parser.add_argument("--disable-embedding-mock-fallback", action="store_true")
     parser.add_argument("--val-ratio", type=float, default=0.2)
     parser.add_argument("--split-seed", type=int, default=42)
     parser.add_argument("--rounds", type=int, default=3)
@@ -139,6 +156,11 @@ def main() -> None:
             val_sequences=val_sequences,
             val_targets=val_targets,
             embedding_dim=int(args.embedding_dim),
+            embedding_backend=str(args.embedding_backend),
+            embedding_model_id=(str(args.embedding_model_id).strip() or None),
+            embedding_device=str(args.embedding_device),
+            embedding_pooling=str(args.embedding_pooling),
+            embedding_allow_mock=(not args.disable_embedding_mock_fallback),
             ridge_alphas=alpha_grid,
         )
 
@@ -153,6 +175,11 @@ def main() -> None:
             mutation_rate=int(args.mutation_rate),
             beta=float(args.beta),
             random_seed=int(args.seed) + round_idx,
+            embedding_backend=str(args.embedding_backend),
+            embedding_model_id=(str(args.embedding_model_id).strip() or None),
+            embedding_device=str(args.embedding_device),
+            embedding_pooling=str(args.embedding_pooling),
+            embedding_allow_mock=(not args.disable_embedding_mock_fallback),
         )
 
         acquired = []
@@ -195,6 +222,9 @@ def main() -> None:
         checkpoint_out,
         model_type="numpy_linear",
         embedding_dim=np.int32(args.embedding_dim),
+        embedding_backend=np.array(str(args.embedding_backend)),
+        embedding_model_id=np.array(str(args.embedding_model_id).strip()),
+        embedding_pooling=np.array(str(args.embedding_pooling)),
         weights=weights.astype(np.float32),
         bias=bias.astype(np.float32),
     )
@@ -213,6 +243,9 @@ def main() -> None:
             "mutation_rate": int(args.mutation_rate),
             "beta": float(args.beta),
             "embedding_dim": int(args.embedding_dim),
+            "embedding_backend": str(args.embedding_backend),
+            "embedding_model_id": str(args.embedding_model_id).strip() or None,
+            "embedding_pooling": str(args.embedding_pooling),
             "val_ratio": float(args.val_ratio),
             "split_seed": int(args.split_seed),
             "ridge_alphas": alpha_grid,

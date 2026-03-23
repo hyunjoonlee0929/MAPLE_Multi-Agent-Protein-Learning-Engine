@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from models.embedding_model import RandomEmbeddingModel
+from models.embedding_model import build_embedding_model
 from utils.metrics import evaluate_property_metrics
 
 
@@ -121,6 +121,11 @@ def main() -> None:
         help="Output NPZ checkpoint path",
     )
     parser.add_argument("--embedding-dim", type=int, default=128, help="Embedding dimension")
+    parser.add_argument("--embedding-backend", type=str, default="random", help="Embedding backend: random|esm2|prott5")
+    parser.add_argument("--embedding-model-id", type=str, default="", help="Optional HF model id override")
+    parser.add_argument("--embedding-device", type=str, default="cpu", help="Embedding device: cpu|cuda|auto")
+    parser.add_argument("--embedding-pooling", type=str, default="mean", help="Embedding pooling: mean|cls")
+    parser.add_argument("--disable-embedding-mock-fallback", action="store_true", help="Disable random fallback when backend fails")
     parser.add_argument("--ridge-alpha", type=float, default=1e-3, help="L2 regularization strength")
     parser.add_argument("--val-ratio", type=float, default=0.2, help="Validation split ratio")
     parser.add_argument("--split-seed", type=int, default=42, help="Train/val split seed")
@@ -153,7 +158,15 @@ def main() -> None:
         seed=int(args.split_seed),
     )
 
-    embedder = RandomEmbeddingModel(embedding_dim=args.embedding_dim)
+    embedder = build_embedding_model(
+        backend=str(args.embedding_backend),
+        embedding_dim=int(args.embedding_dim),
+        model_id=(str(args.embedding_model_id).strip() or None),
+        device=str(args.embedding_device),
+        pooling=str(args.embedding_pooling),
+        allow_mock=(not args.disable_embedding_mock_fallback),
+    )
+    resolved_embedding_dim = int(embedder.embedding_dim)
     train_features = np.stack([embedder.encode(seq) for seq in train_sequences]).astype(np.float32)
     val_features = np.stack([embedder.encode(seq) for seq in val_sequences]).astype(np.float32)
 
@@ -168,7 +181,10 @@ def main() -> None:
     np.savez(
         output_path,
         model_type="numpy_linear",
-        embedding_dim=np.int32(args.embedding_dim),
+        embedding_dim=np.int32(resolved_embedding_dim),
+        embedding_backend=np.array(str(args.embedding_backend)),
+        embedding_model_id=np.array(str(args.embedding_model_id).strip()),
+        embedding_pooling=np.array(str(args.embedding_pooling)),
         weights=weights,
         bias=bias,
     )
@@ -183,7 +199,10 @@ def main() -> None:
         },
         "model": {
             "type": "numpy_linear_ridge",
-            "embedding_dim": int(args.embedding_dim),
+            "embedding_dim": resolved_embedding_dim,
+            "embedding_backend": str(args.embedding_backend),
+            "embedding_model_id": str(args.embedding_model_id).strip() or None,
+            "embedding_pooling": str(args.embedding_pooling),
             "ridge_alpha": float(args.ridge_alpha),
         },
         "train_metrics": train_metrics,

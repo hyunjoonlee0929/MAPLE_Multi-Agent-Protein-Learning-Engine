@@ -6,7 +6,8 @@ MAPLE is a multi-agent system that autonomously explores protein sequence space 
 - Multi-agent loop: planner -> sequence -> structure -> property -> optimization -> evaluation
 - Random mutation-based sequence exploration
 - Structure adapters: `dummy`, `esmfold`, `alphafold2`
-- Embedding + property prediction with uncertainty-aware scoring
+- Embedding backends: `random`, `esm2`, `prott5` (with optional mock fallback)
+- Property prediction with uncertainty-aware scoring
 - Structure-confidence-aware scoring (`w_structure`)
 - Diversity-aware evolutionary optimization
 - Iteration artifact export (JSON/CSV)
@@ -21,6 +22,21 @@ python3 -m pip install -r requirements.txt
 ```bash
 cd MAPLE
 python3 main.py --num-iterations 5 --selection-strategy diverse --min-hamming-distance 2
+```
+
+### Embedding Backend Run (ESM2 / ProtT5)
+```bash
+cd MAPLE
+python3 main.py \
+  --embedding-backend esm2 \
+  --embedding-model-id facebook/esm2_t12_35M_UR50D \
+  --embedding-device auto \
+  --embedding-pooling mean
+```
+
+Disable random fallback for strict embedding runtime:
+```bash
+python3 main.py --embedding-backend esm2 --disable-embedding-mock-fallback
 ```
 
 ## Web UI Run (Streamlit)
@@ -179,6 +195,8 @@ python3 scripts/train_property_numpy.py \
   --data data/sample_property_labels.csv \
   --output checkpoints/property_linear.npz \
   --embedding-dim 128 \
+  --embedding-backend esm2 \
+  --embedding-model-id facebook/esm2_t12_35M_UR50D \
   --val-ratio 0.2 \
   --split-seed 42 \
   --metrics-out outputs/property_metrics/property_train_metrics.json
@@ -195,6 +213,7 @@ The training pipeline now performs:
 cd MAPLE
 python3 scripts/retrain_property_pipeline.py \
   --data data/sample_property_labels.csv \
+  --embedding-backend esm2 \
   --ridge-alphas "1e-4,1e-3,1e-2,1e-1" \
   --checkpoint-out checkpoints/property_linear_best.npz \
   --output-dir outputs/property_retrain

@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.retraining import select_best_trial
-from models.embedding_model import RandomEmbeddingModel
+from models.embedding_model import build_embedding_model
 from scripts.train_property_numpy import (
     fit_ridge_regression,
     load_dataset,
@@ -43,6 +43,11 @@ def main() -> None:
     parser.add_argument("--output-dir", type=str, default="outputs/property_retrain")
     parser.add_argument("--checkpoint-out", type=str, default="checkpoints/property_linear_best.npz")
     parser.add_argument("--embedding-dim", type=int, default=128)
+    parser.add_argument("--embedding-backend", type=str, default="random")
+    parser.add_argument("--embedding-model-id", type=str, default="")
+    parser.add_argument("--embedding-device", type=str, default="cpu")
+    parser.add_argument("--embedding-pooling", type=str, default="mean")
+    parser.add_argument("--disable-embedding-mock-fallback", action="store_true")
     parser.add_argument("--val-ratio", type=float, default=0.2)
     parser.add_argument("--split-seed", type=int, default=42)
     parser.add_argument(
@@ -100,7 +105,15 @@ def main() -> None:
             val_ratio=float(args.val_ratio),
             seed=int(args.split_seed),
         )
-    embedder = RandomEmbeddingModel(embedding_dim=int(args.embedding_dim))
+    embedder = build_embedding_model(
+        backend=str(args.embedding_backend),
+        embedding_dim=int(args.embedding_dim),
+        model_id=(str(args.embedding_model_id).strip() or None),
+        device=str(args.embedding_device),
+        pooling=str(args.embedding_pooling),
+        allow_mock=(not args.disable_embedding_mock_fallback),
+    )
+    resolved_embedding_dim = int(embedder.embedding_dim)
     train_features = np.stack([embedder.encode(seq) for seq in train_sequences]).astype(np.float32)
     val_features = np.stack([embedder.encode(seq) for seq in val_sequences]).astype(np.float32)
 
@@ -134,7 +147,10 @@ def main() -> None:
     np.savez(
         checkpoint_out,
         model_type="numpy_linear",
-        embedding_dim=np.int32(args.embedding_dim),
+        embedding_dim=np.int32(resolved_embedding_dim),
+        embedding_backend=np.array(str(args.embedding_backend)),
+        embedding_model_id=np.array(str(args.embedding_model_id).strip()),
+        embedding_pooling=np.array(str(args.embedding_pooling)),
         weights=best_weights,
         bias=best_bias,
     )
@@ -149,6 +165,12 @@ def main() -> None:
             "val_index_file": (val_index_file or None),
         },
         "search_space": {"ridge_alphas": alpha_grid},
+        "embedding": {
+            "embedding_dim": resolved_embedding_dim,
+            "embedding_backend": str(args.embedding_backend),
+            "embedding_model_id": str(args.embedding_model_id).strip() or None,
+            "embedding_pooling": str(args.embedding_pooling),
+        },
         "trials": trials,
         "best": {
             "ridge_alpha": best_alpha,

@@ -19,7 +19,7 @@ from core.active_learning import synthetic_property_oracle
 from core.campaign import append_labeled_records, select_novel_top_sequences
 from core.retraining import select_best_trial
 from main import load_config, run_maple
-from models.embedding_model import RandomEmbeddingModel
+from models.embedding_model import build_embedding_model
 from scripts.retrain_property_pipeline import parse_alpha_grid
 from scripts.train_property_numpy import (
     fit_ridge_regression,
@@ -36,9 +36,22 @@ def _train_round_model(
     val_sequences: list[str],
     val_targets: np.ndarray,
     embedding_dim: int,
+    embedding_backend: str,
+    embedding_model_id: str | None,
+    embedding_device: str,
+    embedding_pooling: str,
+    embedding_allow_mock: bool,
     ridge_alphas: list[float],
 ) -> tuple[np.ndarray, np.ndarray, dict]:
-    embedder = RandomEmbeddingModel(embedding_dim=embedding_dim)
+    embedder = build_embedding_model(
+        backend=embedding_backend,
+        embedding_dim=embedding_dim,
+        model_id=embedding_model_id,
+        device=embedding_device,
+        pooling=embedding_pooling,
+        allow_mock=embedding_allow_mock,
+    )
+    resolved_embedding_dim = int(embedder.embedding_dim)
     train_x = np.stack([embedder.encode(seq) for seq in train_sequences]).astype(np.float32)
     val_x = np.stack([embedder.encode(seq) for seq in val_sequences]).astype(np.float32)
 
@@ -64,6 +77,10 @@ def _train_round_model(
     val_pred = predict_linear(val_x, weights, bias)
 
     report = {
+        "embedding_dim": resolved_embedding_dim,
+        "embedding_backend": embedding_backend,
+        "embedding_model_id": embedding_model_id,
+        "embedding_pooling": embedding_pooling,
         "best_alpha": best_alpha,
         "trials": trials,
         "train_metrics": evaluate_property_metrics(train_targets, train_pred),
@@ -90,6 +107,11 @@ def main() -> None:
     parser.add_argument("--maple-iterations", type=int, default=3)
     parser.add_argument("--acquisition-batch-size", type=int, default=4)
     parser.add_argument("--embedding-dim", type=int, default=128)
+    parser.add_argument("--embedding-backend", type=str, default="random")
+    parser.add_argument("--embedding-model-id", type=str, default="")
+    parser.add_argument("--embedding-device", type=str, default="cpu")
+    parser.add_argument("--embedding-pooling", type=str, default="mean")
+    parser.add_argument("--disable-embedding-mock-fallback", action="store_true")
     parser.add_argument("--val-ratio", type=float, default=0.2)
     parser.add_argument("--split-seed", type=int, default=42)
     parser.add_argument("--ridge-alphas", type=str, default="1e-4,1e-3,1e-2,1e-1")
@@ -147,12 +169,20 @@ def main() -> None:
             val_sequences=val_sequences,
             val_targets=val_targets,
             embedding_dim=int(args.embedding_dim),
+            embedding_backend=str(args.embedding_backend),
+            embedding_model_id=(str(args.embedding_model_id).strip() or None),
+            embedding_device=str(args.embedding_device),
+            embedding_pooling=str(args.embedding_pooling),
+            embedding_allow_mock=(not args.disable_embedding_mock_fallback),
             ridge_alphas=ridge_alphas,
         )
         np.savez(
             checkpoint_path,
             model_type="numpy_linear",
-            embedding_dim=np.int32(args.embedding_dim),
+            embedding_dim=np.int32(fit_report.get("embedding_dim", int(args.embedding_dim))),
+            embedding_backend=np.array(str(args.embedding_backend)),
+            embedding_model_id=np.array(str(args.embedding_model_id).strip()),
+            embedding_pooling=np.array(str(args.embedding_pooling)),
             weights=w.astype(np.float32),
             bias=b.astype(np.float32),
         )
@@ -231,6 +261,9 @@ def main() -> None:
             "top_k": int(args.top_k),
             "mutation_rate": int(args.mutation_rate),
             "embedding_dim": int(args.embedding_dim),
+            "embedding_backend": str(args.embedding_backend),
+            "embedding_model_id": str(args.embedding_model_id).strip() or None,
+            "embedding_pooling": str(args.embedding_pooling),
             "val_ratio": float(args.val_ratio),
             "split_seed": int(args.split_seed),
             "ridge_alphas": ridge_alphas,

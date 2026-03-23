@@ -269,6 +269,7 @@ with st.sidebar:
         "structure_backend": str(profile.get("structure_backend", model.get("structure_backend", "esmfold"))),
         "structure_strict": bool(profile.get("structure_strict", model.get("structure_strict", False))),
         "constraint_enabled": bool(profile.get("constraint_enabled", runtime.get("constraint_enabled", False))),
+        "embedding_backend": str(model.get("embedding_backend", "random")),
     }
 
     with st.expander("Parameter Guide", expanded=False):
@@ -280,6 +281,7 @@ with st.sidebar:
             - `selection_strategy`: `diverse`, `elitist`, `pareto`, `pareto_bo`.
             - `structure_backend`: `esmfold` recommended for real structure path.
             - `structure_strict`: if enabled, fail run when external structure call fails.
+            - `embedding_backend`: choose `esm2`/`prott5` for real PLM embeddings, `random` for fast MVP.
             - `constraint_enabled`: enforce feasibility thresholds before elite selection.
             """
         )
@@ -569,6 +571,44 @@ with st.sidebar:
         step=8,
         disabled=ui_mode != "Advanced",
     )
+    embedding_backend = st.selectbox(
+        "Embedding Backend",
+        options=["random", "esm2", "prott5"],
+        index=["random", "esm2", "prott5"].index(
+            defaults["embedding_backend"] if defaults["embedding_backend"] in {"random", "esm2", "prott5"} else "random"
+        ),
+        help="Protein embedding backend for property prediction.",
+        disabled=ui_mode != "Advanced",
+    )
+    default_embedding_model_id = str(model.get("embedding_model_id", "") or "")
+    embedding_model_id = st.text_input(
+        "Embedding Model ID (optional)",
+        value=default_embedding_model_id,
+        help="Leave empty to use backend default model id.",
+        disabled=ui_mode != "Advanced",
+    )
+    embedding_device = st.selectbox(
+        "Embedding Device",
+        options=["cpu", "auto", "cuda"],
+        index=["cpu", "auto", "cuda"].index(
+            str(model.get("embedding_device", "cpu"))
+            if str(model.get("embedding_device", "cpu")) in {"cpu", "auto", "cuda"}
+            else "cpu"
+        ),
+        disabled=ui_mode != "Advanced",
+    )
+    embedding_pooling = st.selectbox(
+        "Embedding Pooling",
+        options=["mean", "cls"],
+        index=0 if str(model.get("embedding_pooling", "mean")).lower() != "cls" else 1,
+        disabled=ui_mode != "Advanced",
+    )
+    embedding_allow_mock = st.checkbox(
+        "Allow Embedding Mock Fallback",
+        value=bool(model.get("embedding_allow_mock", True)),
+        help="When enabled, falls back to random embedding if model load/inference fails.",
+        disabled=ui_mode != "Advanced",
+    )
     uncertainty_samples = st.slider(
         "Uncertainty Samples",
         min_value=1,
@@ -844,6 +884,11 @@ if run_clicked:
         "structure_strict": bool(structure_strict),
         "structure_batch_size": int(structure_batch_size),
         "embedding_dim": int(embedding_dim),
+        "embedding_backend": str(embedding_backend),
+        "embedding_model_id": embedding_model_id.strip() or None,
+        "embedding_device": str(embedding_device),
+        "embedding_pooling": str(embedding_pooling),
+        "embedding_allow_mock": bool(embedding_allow_mock),
         "property_checkpoint": property_checkpoint.strip() or None,
         "uncertainty_samples": int(uncertainty_samples),
         "uncertainty_noise": float(uncertainty_noise),

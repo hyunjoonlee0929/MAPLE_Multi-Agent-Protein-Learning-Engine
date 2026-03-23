@@ -15,7 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.validation import rank_by_val_rmse
-from models.embedding_model import RandomEmbeddingModel
+from models.embedding_model import build_embedding_model
 from models.property_model import PropertyPredictor
 from scripts.train_property_numpy import load_dataset, split_train_val
 from utils.metrics import evaluate_property_metrics
@@ -40,14 +40,57 @@ def infer_embedding_dim(checkpoint_path: str, fallback_dim: int) -> int:
     return int(fallback_dim)
 
 
+def infer_embedding_backend(checkpoint_path: str, fallback_backend: str) -> str:
+    path = Path(checkpoint_path)
+    if path.suffix.lower() != ".npz":
+        return str(fallback_backend)
+    data = np.load(path, allow_pickle=False)
+    raw = data.get("embedding_backend")
+    if raw is None:
+        return str(fallback_backend)
+    if isinstance(raw, np.ndarray):
+        if raw.shape == ():
+            return str(raw.item())
+        return str(raw.reshape(-1)[0])
+    return str(raw)
+
+
+def infer_embedding_model_id(checkpoint_path: str) -> str | None:
+    path = Path(checkpoint_path)
+    if path.suffix.lower() != ".npz":
+        return None
+    data = np.load(path, allow_pickle=False)
+    raw = data.get("embedding_model_id")
+    if raw is None:
+        return None
+    if isinstance(raw, np.ndarray):
+        value = str(raw.item()) if raw.shape == () else str(raw.reshape(-1)[0])
+    else:
+        value = str(raw)
+    value = value.strip()
+    return value or None
+
+
 def evaluate_checkpoint(
     checkpoint_path: str,
     val_sequences: list[str],
     val_targets: np.ndarray,
     fallback_embedding_dim: int,
+    fallback_backend: str,
+    embedding_device: str,
+    embedding_pooling: str,
 ) -> dict:
     emb_dim = infer_embedding_dim(checkpoint_path, fallback_embedding_dim)
-    embedder = RandomEmbeddingModel(embedding_dim=emb_dim)
+    backend = infer_embedding_backend(checkpoint_path, fallback_backend)
+    model_id = infer_embedding_model_id(checkpoint_path)
+    embedder = build_embedding_model(
+        backend=backend,
+        embedding_dim=emb_dim,
+        model_id=model_id,
+        device=embedding_device,
+        pooling=embedding_pooling,
+        allow_mock=True,
+    )
     features = np.stack([embedder.encode(seq) for seq in val_sequences]).astype(np.float32)
     predictor = PropertyPredictor(
         embedding_dim=emb_dim,
@@ -59,7 +102,9 @@ def evaluate_checkpoint(
     metrics = evaluate_property_metrics(val_targets, preds)
     return {
         "checkpoint": checkpoint_path,
-        "embedding_dim": emb_dim,
+        "embedding_dim": int(embedder.embedding_dim),
+        "embedding_backend": backend,
+        "embedding_model_id": model_id,
         "val_metrics": metrics,
     }
 
@@ -73,6 +118,8 @@ def export_leaderboard_csv(results: list[dict], output_csv: Path) -> None:
                 "rank",
                 "checkpoint",
                 "embedding_dim",
+                "embedding_backend",
+                "embedding_model_id",
                 "val_rmse_mean",
                 "val_mae_mean",
                 "val_r2_mean",
@@ -87,6 +134,8 @@ def export_leaderboard_csv(results: list[dict], output_csv: Path) -> None:
                     "rank": idx,
                     "checkpoint": row["checkpoint"],
                     "embedding_dim": row["embedding_dim"],
+                    "embedding_backend": row.get("embedding_backend"),
+                    "embedding_model_id": row.get("embedding_model_id"),
                     "val_rmse_mean": mean["rmse"],
                     "val_mae_mean": mean["mae"],
                     "val_r2_mean": mean["r2"],
@@ -102,6 +151,9 @@ def main() -> None:
     parser.add_argument("--val-ratio", type=float, default=0.2)
     parser.add_argument("--split-seed", type=int, default=42)
     parser.add_argument("--embedding-dim", type=int, default=128)
+    parser.add_argument("--embedding-backend", type=str, default="random")
+    parser.add_argument("--embedding-device", type=str, default="cpu")
+    parser.add_argument("--embedding-pooling", type=str, default="mean")
     parser.add_argument("--output-dir", type=str, default="outputs/property_validation")
     args = parser.parse_args()
 
@@ -141,6 +193,9 @@ def main() -> None:
             val_sequences=val_sequences,
             val_targets=val_targets,
             fallback_embedding_dim=int(args.embedding_dim),
+            fallback_backend=str(args.embedding_backend),
+            embedding_device=str(args.embedding_device),
+            embedding_pooling=str(args.embedding_pooling),
         )
         for ckpt in resolved_checkpoints
     ]

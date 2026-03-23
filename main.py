@@ -165,6 +165,11 @@ def run_maple(
 
     model_cfg = dict(config.get("model", {}))
     embedding_dim = int(_pick("embedding_dim", model_cfg.get("embedding_dim", 128)))
+    embedding_backend = str(_pick("embedding_backend", model_cfg.get("embedding_backend", "random")))
+    embedding_model_id = _pick("embedding_model_id", model_cfg.get("embedding_model_id"))
+    embedding_device = str(_pick("embedding_device", model_cfg.get("embedding_device", "cpu")))
+    embedding_pooling = str(_pick("embedding_pooling", model_cfg.get("embedding_pooling", "mean")))
+    embedding_allow_mock = bool(_pick("embedding_allow_mock", model_cfg.get("embedding_allow_mock", True)))
     property_checkpoint = _pick("property_checkpoint", model_cfg.get("property_checkpoint"))
     structure_backend = str(_pick("structure_backend", model_cfg.get("structure_backend", "dummy")))
     uncertainty_samples = int(_pick("uncertainty_samples", model_cfg.get("uncertainty_samples", 5)))
@@ -194,6 +199,11 @@ def run_maple(
         ),
         property_agent=PropertyAgent(
             embedding_dim=embedding_dim,
+            embedding_backend=embedding_backend,
+            embedding_model_id=embedding_model_id,
+            embedding_device=embedding_device,
+            embedding_pooling=embedding_pooling,
+            embedding_allow_mock=embedding_allow_mock,
             property_checkpoint=property_checkpoint,
             uncertainty_samples=uncertainty_samples,
             uncertainty_noise=uncertainty_noise,
@@ -233,6 +243,9 @@ def run_maple(
         "num_iterations": num_iterations,
         "structure_backend": structure_backend,
         "structure_strict": bool(structure_options.get("structure_strict", False)),
+        "embedding_backend": embedding_backend,
+        "embedding_model_id": embedding_model_id,
+        "embedding_allow_mock": embedding_allow_mock,
         "selection_strategy": runtime_cfg.get("selection_strategy", "elitist"),
         "output_dir": str(resolved_output_dir),
         "validation_linked": bool(validation_metadata),
@@ -278,6 +291,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--w-pae", type=float, default=None, help="Score weight for inverse PAE")
 
     parser.add_argument("--embedding-dim", type=int, default=None, help="Override embedding dimension")
+    parser.add_argument("--embedding-backend", type=str, default=None, help="Embedding backend: random|esm2|prott5")
+    parser.add_argument("--embedding-model-id", type=str, default=None, help="Override HF model id for embedding backend")
+    parser.add_argument("--embedding-device", type=str, default=None, help="Embedding device: cpu|cuda|auto")
+    parser.add_argument("--embedding-pooling", type=str, default=None, help="Embedding pooling: mean|cls")
+    parser.add_argument("--disable-embedding-mock-fallback", action="store_true", help="Disable random fallback when embedding backend fails")
     parser.add_argument("--property-checkpoint", type=str, default=None, help="Property checkpoint path")
     parser.add_argument("--uncertainty-samples", type=int, default=None, help="MC sample count")
     parser.add_argument("--uncertainty-noise", type=float, default=None, help="Input noise std")
@@ -338,6 +356,11 @@ def main() -> None:
         "w_ptm": args.w_ptm,
         "w_pae": args.w_pae,
         "embedding_dim": args.embedding_dim,
+        "embedding_backend": args.embedding_backend,
+        "embedding_model_id": args.embedding_model_id,
+        "embedding_device": args.embedding_device,
+        "embedding_pooling": args.embedding_pooling,
+        "embedding_allow_mock": (None if not args.disable_embedding_mock_fallback else False),
         "property_checkpoint": args.property_checkpoint,
         "uncertainty_samples": args.uncertainty_samples,
         "uncertainty_noise": args.uncertainty_noise,

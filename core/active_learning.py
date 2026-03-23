@@ -7,7 +7,7 @@ import random
 
 import numpy as np
 
-from models.embedding_model import RandomEmbeddingModel
+from models.embedding_model import build_embedding_model
 from utils.mutation import random_mutation
 
 
@@ -80,12 +80,24 @@ def propose_active_learning_batch(
     mutation_rate: int,
     beta: float,
     random_seed: int,
+    embedding_backend: str = "random",
+    embedding_model_id: str | None = None,
+    embedding_device: str = "cpu",
+    embedding_pooling: str = "mean",
+    embedding_allow_mock: bool = True,
 ) -> list[dict]:
     """Propose candidate batch via surrogate mean + novelty acquisition."""
     if not train_sequences or train_targets.shape[0] == 0 or batch_size <= 0:
         return []
 
-    embedder = RandomEmbeddingModel(embedding_dim=embedding_dim)
+    embedder = build_embedding_model(
+        backend=embedding_backend,
+        embedding_dim=embedding_dim,
+        model_id=embedding_model_id,
+        device=embedding_device,
+        pooling=embedding_pooling,
+        allow_mock=embedding_allow_mock,
+    )
     train_x = np.stack([embedder.encode(seq) for seq in train_sequences]).astype(np.float32)
     score_y = scalar_objective(train_targets[:, 0], train_targets[:, 1])
     w, b = _fit_linear_scalar(train_x, score_y, ridge_alpha=1e-3)

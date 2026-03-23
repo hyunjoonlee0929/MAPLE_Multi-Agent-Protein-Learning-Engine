@@ -15,7 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.retraining import select_best_trial
-from models.embedding_model import RandomEmbeddingModel
+from models.embedding_model import build_embedding_model
 from scripts.retrain_property_pipeline import parse_alpha_grid
 from scripts.train_property_numpy import (
     fit_ridge_regression,
@@ -51,6 +51,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Property model cross-seed reproducibility report")
     parser.add_argument("--data", type=str, default="data/sample_property_labels.csv")
     parser.add_argument("--embedding-dim", type=int, default=128)
+    parser.add_argument("--embedding-backend", type=str, default="random")
+    parser.add_argument("--embedding-model-id", type=str, default="")
+    parser.add_argument("--embedding-device", type=str, default="cpu")
+    parser.add_argument("--embedding-pooling", type=str, default="mean")
+    parser.add_argument("--disable-embedding-mock-fallback", action="store_true")
     parser.add_argument("--val-ratio", type=float, default=0.2)
     parser.add_argument("--split-seeds", type=str, default="1,7,13,21,42")
     parser.add_argument("--ridge-alphas", type=str, default="1e-4,1e-3,1e-2,1e-1")
@@ -70,7 +75,15 @@ def main() -> None:
     alpha_grid = parse_alpha_grid(args.ridge_alphas)
 
     sequences, targets = load_dataset(data_path)
-    embedder = RandomEmbeddingModel(embedding_dim=int(args.embedding_dim))
+    embedder = build_embedding_model(
+        backend=str(args.embedding_backend),
+        embedding_dim=int(args.embedding_dim),
+        model_id=(str(args.embedding_model_id).strip() or None),
+        device=str(args.embedding_device),
+        pooling=str(args.embedding_pooling),
+        allow_mock=(not args.disable_embedding_mock_fallback),
+    )
+    resolved_embedding_dim = int(embedder.embedding_dim)
 
     runs: list[dict] = []
     for split_seed in split_seeds:
@@ -131,7 +144,10 @@ def main() -> None:
     report = {
         "dataset": str(data_path),
         "config": {
-            "embedding_dim": int(args.embedding_dim),
+            "embedding_dim": resolved_embedding_dim,
+            "embedding_backend": str(args.embedding_backend),
+            "embedding_model_id": str(args.embedding_model_id).strip() or None,
+            "embedding_pooling": str(args.embedding_pooling),
             "val_ratio": float(args.val_ratio),
             "split_seeds": split_seeds,
             "ridge_alphas": alpha_grid,

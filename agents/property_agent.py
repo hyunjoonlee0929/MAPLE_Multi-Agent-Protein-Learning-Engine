@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from models.embedding_model import RandomEmbeddingModel
+from models.embedding_model import build_embedding_model
 from models.property_model import PropertyPredictor
 
 
@@ -14,13 +14,25 @@ class PropertyAgent:
     def __init__(
         self,
         embedding_dim: int = 128,
+        embedding_backend: str = "random",
+        embedding_model_id: str | None = None,
+        embedding_device: str = "cpu",
+        embedding_pooling: str = "mean",
+        embedding_allow_mock: bool = True,
         property_checkpoint: str | None = None,
         uncertainty_samples: int = 5,
         uncertainty_noise: float = 0.02,
     ) -> None:
-        self.embedding_model = RandomEmbeddingModel(embedding_dim=embedding_dim)
-        self.predictor = PropertyPredictor(
+        self.embedding_model = build_embedding_model(
+            backend=embedding_backend,
             embedding_dim=embedding_dim,
+            model_id=embedding_model_id,
+            device=embedding_device,
+            pooling=embedding_pooling,
+            allow_mock=embedding_allow_mock,
+        )
+        self.predictor = PropertyPredictor(
+            embedding_dim=int(self.embedding_model.embedding_dim),
             checkpoint_path=property_checkpoint,
             uncertainty_samples=uncertainty_samples,
             uncertainty_noise=uncertainty_noise,

@@ -38,6 +38,11 @@ runtime:
 
 model:
   embedding_dim: 128
+  embedding_backend: "random"
+  embedding_model_id: ""
+  embedding_device: "cpu"
+  embedding_pooling: "mean"
+  embedding_allow_mock: true
   structure_backend: "esmfold"
   esmfold_command: "python3 scripts/run_esmfold_adapter.py --sequence-file {sequence_file} --output-file {output_file} --allow-mock"
   alphafold2_command: ""
