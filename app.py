@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from core.active_learning_jobs import run_active_learning_job
 from core.multiobjective import build_pareto_candidate_rows
 from core.validation import cv_run_rows, leaderboard_rows
 from core.validation_jobs import run_validation_report_jobs
@@ -333,12 +334,58 @@ with st.sidebar:
         "CV Report Output Dir",
         value="outputs/property_cv",
     )
+    st.subheader("Active Learning")
+    al_data_path = st.text_input("AL Data CSV", value="data/sample_property_labels.csv")
+    al_output_dir = st.text_input("AL Output Dir", value="outputs/active_learning")
+    al_checkpoint_out = st.text_input(
+        "AL Checkpoint Out",
+        value="checkpoints/property_linear_active_learning.npz",
+    )
+    al_rounds = st.slider("AL Rounds", min_value=1, max_value=10, value=3, step=1)
+    al_batch_size = st.slider("AL Batch Size", min_value=1, max_value=20, value=4, step=1)
+    al_pool_size = st.slider("AL Pool Size", min_value=10, max_value=200, value=40, step=5)
+    al_beta = st.slider("AL Beta", min_value=0.0, max_value=2.0, value=0.30, step=0.05)
+    al_split_seed = st.number_input("AL Split Seed", min_value=0, value=42, step=1)
+    al_ridge_alphas = st.text_input("AL Ridge Alphas", value="1e-4,1e-3,1e-2,1e-1")
+    run_active_learning_clicked = st.button(
+        "Run Active Learning Cycle",
+        use_container_width=True,
+    )
     generate_validation_reports_clicked = st.button(
         "Generate Validation Reports",
         use_container_width=True,
     )
 
     run_clicked = st.button("Run MAPLE", type="primary", use_container_width=True)
+
+if run_active_learning_clicked:
+    with st.spinner("Running active learning cycle..."):
+        al_result = run_active_learning_job(
+            root=ROOT,
+            data_path=al_data_path.strip(),
+            output_dir=al_output_dir.strip(),
+            checkpoint_out=al_checkpoint_out.strip(),
+            embedding_dim=int(embedding_dim),
+            val_ratio=float(validation_val_ratio),
+            split_seed=int(al_split_seed),
+            rounds=int(al_rounds),
+            batch_size=int(al_batch_size),
+            pool_size=int(al_pool_size),
+            mutation_rate=int(mutation_rate),
+            beta=float(al_beta),
+            ridge_alphas=al_ridge_alphas.strip(),
+            seed=int(seed),
+        )
+    if al_result.ok:
+        st.success("Active learning cycle completed.")
+    else:
+        st.error("Active learning cycle failed. Check logs below.")
+    with st.expander(f"Active Learning Job (rc={al_result.returncode})", expanded=not al_result.ok):
+        st.code(" ".join(al_result.command))
+        if al_result.stdout.strip():
+            st.text(al_result.stdout.strip())
+        if al_result.stderr.strip():
+            st.text(al_result.stderr.strip())
 
 if generate_validation_reports_clicked:
     with st.spinner("Generating validation leaderboard and CV report..."):
@@ -565,7 +612,7 @@ if run_clicked:
 
     st.subheader("Resolved Settings")
     st.code(json.dumps(resolved, indent=2))
-elif not generate_validation_reports_clicked:
+elif not generate_validation_reports_clicked and not run_active_learning_clicked:
     st.info("Configure parameters in the sidebar, then click 'Run MAPLE'.")
 
 st.divider()

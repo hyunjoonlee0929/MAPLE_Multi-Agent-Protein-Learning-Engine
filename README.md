@@ -250,6 +250,26 @@ python3 scripts/property_cv_report.py \
 Output:
 - `outputs/property_cv/property_cv_report.json`
 
+## Active Learning Cycle
+You can run iterative active learning with pseudo-label acquisition and retraining:
+
+```bash
+cd MAPLE
+python3 scripts/active_learning_cycle.py \
+  --data data/sample_property_labels.csv \
+  --rounds 3 \
+  --batch-size 4 \
+  --pool-size 40 \
+  --beta 0.30 \
+  --checkpoint-out checkpoints/property_linear_active_learning.npz \
+  --output-dir outputs/active_learning
+```
+
+Outputs:
+- `outputs/active_learning/active_learning_report.json`
+- `outputs/active_learning/augmented_dataset.csv`
+- `checkpoints/property_linear_active_learning.npz`
+
 ### 3) Run MAPLE with trained checkpoint
 ```bash
 cd MAPLE
@@ -270,6 +290,7 @@ The Streamlit UI also supports entering the checkpoint path in the sidebar.
   - cross-seed reproducibility (`property_cv_report.json`)
 - Sidebar button to generate validation reports directly from UI
 - Pareto front view for current run candidates (stability/activity/objective rank)
+- Sidebar button to run active learning cycle and inspect logs
 - Downloadable artifacts (`history.json`, `summary.json`)
 
 `summary.json` now includes `validation_reports` when report paths are provided.
